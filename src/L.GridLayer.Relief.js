@@ -16,17 +16,53 @@
 // ====================== INTERNAL ELEVATION MANAGEMENT ======================
 
 /**
+ * Default Terrarium elevation extraction function
+ * @param {number} r - Red channel value (0-255)
+ * @param {number} g - Green channel value (0-255)
+ * @param {number} b - Blue channel value (0-255)
+ * @param {number} a - Alpha channel value (0-255) - unused in Terrarium format
+ * @returns {number} Elevation in meters
+ */
+const _defaultElevationExtractor = function(r, g, b, a) {
+    return (r * 256 + g + b / 256) - 32768;
+};
+
+/**
+ * Mapbox Terrain-RGB elevation extraction function
+ * @param {number} r - Red channel value (0-255)
+ * @param {number} g - Green channel value (0-255)
+ * @param {number} b - Blue channel value (0-255)
+ * @param {number} a - Alpha channel value (0-255) - unused
+ * @returns {number} Elevation in meters
+ */
+const _mapboxElevationExtractor = function(r, g, b, a) {
+    return -10000 + ((r * 256 * 256 + g * 256 + b) * 0.1);
+};
+
+/**
+ * Default elevation tile URL pattern (AWS Terrarium)
+ * @param {number} z - Zoom level
+ * @param {number} x - Tile X coordinate
+ * @param {number} y - Tile Y coordinate
+ * @returns {string} Tile URL
+ */
+const _defaultElevationUrl = function(z, x, y) {
+    return `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+};
+
+/**
  * _ElevationTileManager - Manages elevation data fetching and caching
  *
- * This class handles fetching elevation tiles from AWS Terrarium dataset,
- * which encodes elevation data in PNG images using RGB values.
+ * This class handles fetching elevation tiles from configurable sources,
+ * with support for custom URL patterns and elevation extraction functions.
  */
 class _ElevationTileManager {
-    constructor(maxCacheSize = 50) {
+    constructor(options = {}) {
         this.tileCache = new Map();
         this.accessOrder = [];
-        this.maxCacheSize = maxCacheSize;
-        this.baseUrl = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
+        this.maxCacheSize = options.maxCacheSize || 50;
+        this.elevationUrl = options.elevationUrl || _defaultElevationUrl;
+        this.elevationExtractor = options.elevationExtractor || _defaultElevationExtractor;
         this.pendingRequests = new Map();
     }
 
@@ -80,7 +116,9 @@ class _ElevationTileManager {
     }
 
     async fetchTile(z, x, y, abortSignal) {
-        const url = `${this.baseUrl}/${z}/${x}/${y}.png`;
+        const url = typeof this.elevationUrl === 'function' 
+            ? this.elevationUrl(z, x, y)
+            : this.elevationUrl.replace('{z}', z).replace('{x}', x).replace('{y}', y);
         
         try {
             const response = await fetch(url, { signal: abortSignal });
@@ -122,8 +160,8 @@ class _ElevationTileManager {
         const r = tileData[pixelIndex];
         const g = tileData[pixelIndex + 1];
         const b = tileData[pixelIndex + 2];
-        const elevation = (r * 256 + g + b / 256) - 32768;
-        return elevation;
+        const a = tileData[pixelIndex + 3];
+        return this.elevationExtractor(r, g, b, a);
     }
 
     clearCache() {
@@ -136,15 +174,16 @@ class _ElevationTileManager {
     }
 }
 
-// Create singleton instance
-const _elevationManager = new _ElevationTileManager();
+// We'll create the elevation manager per layer instance instead of singleton
+// to support different elevation sources per layer
 
 /**
  * _ElevationCache - Local cache for a 3x3 grid of elevation tiles
  */
 class _ElevationCache {
-    constructor() {
+    constructor(elevationManager) {
         this.tiles = new Map();
+        this.elevationManager = elevationManager;
     }
 
     async init(z, x, y, abortSignal) {
@@ -153,7 +192,7 @@ class _ElevationCache {
                 let rx = x + dx;
                 let ry = y + dy;
                 const tileKey = `${z}/${rx}/${ry}`;
-                this.tiles.set(tileKey, await _elevationManager.getTile(z, rx, ry, abortSignal));
+                this.tiles.set(tileKey, await this.elevationManager.getTile(z, rx, ry, abortSignal));
             }
         }
     }
@@ -183,7 +222,7 @@ class _ElevationCache {
 
         const tileKey = `${z}/${tileX}/${tileY}`;
         const tileData = this.tiles.get(tileKey);
-        return _elevationManager.extractElevation(tileData, pixelI, pixelJ);
+        return this.elevationManager.extractElevation(tileData, pixelI, pixelJ);
     }
 }
 
@@ -206,7 +245,7 @@ const _fillHillshadeTile = async (data, coords, abortSignal, layer) => {
     const a2 = Math.cos(beta) * Math.sin(alpha);
     const a3 = Math.cos(beta) * Math.cos(alpha);
 
-    const elevationCache = new _ElevationCache();
+    const elevationCache = new _ElevationCache(layer.elevationManager);
     await elevationCache.init(z, x, y, abortSignal);
 
     for (let i = 0; i < 256; i++) {
@@ -332,7 +371,7 @@ const _fillSlopeTile = async (data, coords, abortSignal, layer) => {
     const clampedLatitude = Math.max(-89.9, Math.min(89.9, latitude));
     const pixelSizeMeters = Math.max(0.1, metersPerPixelEquator * Math.cos(clampedLatitude * Math.PI / 180));
 
-    const elevationCache = new _ElevationCache();
+    const elevationCache = new _ElevationCache(layer.elevationManager);
     await elevationCache.init(z, x, y, abortSignal);
 
     for (let i = 0; i < 256; i++) {
@@ -397,6 +436,13 @@ L.GridLayer.Relief = L.GridLayer.extend({
         // Configure hillshade parameters (only used in hillshade mode)
         this.azimuth = (options && typeof options.azimuth === 'number') ? options.azimuth : 315;
         this.elevation = (options && typeof options.elevation === 'number') ? options.elevation : 45;
+
+        // Create elevation manager with custom options
+        this.elevationManager = new _ElevationTileManager({
+            maxCacheSize: (options && options.maxCacheSize) || 50,
+            elevationUrl: (options && options.elevationUrl) || _defaultElevationUrl,
+            elevationExtractor: (options && options.elevationExtractor) || _defaultElevationExtractor
+        });
 
         // Assign the appropriate rendering function based on mode
         // These functions are defined internally above
@@ -560,6 +606,17 @@ L.GridLayer.Relief = L.GridLayer.extend({
  */
 L.gridLayer.relief = function(options) {
     return new L.GridLayer.Relief(options);
+};
+
+/**
+ * Predefined elevation extractors for common formats
+ */
+L.GridLayer.Relief.elevationExtractors = {
+    terrarium: _defaultElevationExtractor,
+    mapbox: _mapboxElevationExtractor,
+    custom: function(extractorFn) {
+        return extractorFn;
+    }
 };
 
 })();

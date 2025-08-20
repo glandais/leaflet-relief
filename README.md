@@ -76,6 +76,47 @@ console.log('Azimuth:', hillshade.getAzimuth());
 console.log('Elevation:', hillshade.getElevation());
 ```
 
+### Custom Elevation Sources
+
+#### Using Mapbox Terrain-RGB tiles
+```javascript
+// Use Mapbox Terrain-RGB tiles (requires access token)
+const mapboxRelief = L.gridLayer.relief({
+    mode: 'hillshade',
+    elevationUrl: function(z, x, y) {
+        return `https://api.mapbox.com/v4/mapbox.terrain-rgb/${z}/${x}/${y}.pngraw?access_token=YOUR_ACCESS_TOKEN`;
+    },
+    elevationExtractor: L.GridLayer.Relief.elevationExtractors.mapbox
+});
+```
+
+#### Using custom elevation tile source
+```javascript
+// Use a custom tile server with URL template
+const customRelief = L.gridLayer.relief({
+    mode: 'hillshade',
+    elevationUrl: 'https://mytileserver.com/elevation/{z}/{x}/{y}.png',
+    elevationExtractor: function(r, g, b, a) {
+        // Custom decoding logic for your elevation format
+        // Example: simple grayscale elevation (0-255m range)
+        return r; // Use red channel as elevation in meters
+    },
+    maxCacheSize: 100  // Increase cache size for better performance
+});
+```
+
+#### Using NextZen Terrarium tiles
+```javascript
+// NextZen Terrarium tiles (requires API key)
+const nextzenRelief = L.gridLayer.relief({
+    mode: 'hillshade',
+    elevationUrl: function(z, x, y) {
+        return `https://tile.nextzen.org/tilezen/terrain/v1/256/terrarium/${z}/${x}/${y}.png?api_key=YOUR_API_KEY`;
+    },
+    elevationExtractor: L.GridLayer.Relief.elevationExtractors.terrarium
+});
+```
+
 ### Slope Analysis Layer
 ```javascript
 // Create a slope analysis layer
@@ -134,6 +175,14 @@ Extends `L.GridLayer` to provide terrain visualization capabilities.
 
 `L.gridLayer.relief(options)` - Creates a new relief layer instance.
 
+### Predefined Elevation Extractors
+
+Available via `L.GridLayer.Relief.elevationExtractors`:
+
+- `terrarium` - AWS Terrarium format decoder (default)
+- `mapbox` - Mapbox Terrain-RGB format decoder
+- `custom(fn)` - Wrapper for custom decoder functions
+
 #### Constructor Options
 
 | Option | Type | Default | Description |
@@ -141,6 +190,9 @@ Extends `L.GridLayer` to provide terrain visualization capabilities.
 | `mode` | `String` | `'hillshade'` | Visualization mode: `'hillshade'` or `'slope'` |
 | `azimuth` | `Number` | `315` | Sun azimuth angle in degrees (0-360°) for hillshade mode |
 | `elevation` | `Number` | `45` | Sun elevation angle in degrees (0-90°) for hillshade mode |
+| `elevationUrl` | `String/Function` | AWS Terrarium | Custom elevation tile URL pattern or function |
+| `elevationExtractor` | `Function` | Terrarium decoder | Custom function to extract elevation from RGBA values |
+| `maxCacheSize` | `Number` | `50` | Maximum number of elevation tiles to cache |
 | `opacity` | `Number` | `1.0` | Layer opacity (0-1) |
 | `zIndex` | `Number` | `1` | Layer stacking order |
 
@@ -188,20 +240,30 @@ Inherits all events from `L.GridLayer`:
 - Color mapping: Green (flat) → Red (steep)
 - Uses HSV color space for smooth gradients
 
-## Data Source
+## Data Sources
 
-Elevation data is fetched from AWS Terrarium tiles:
+### Default: AWS Terrarium
 - **URL Pattern**: `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`
 - **Encoding**: RGB to elevation: `(R*256 + G + B/256) - 32768` meters
 - **Resolution**: ~30m at equator
 - **Coverage**: Global
+- **Free**: No API key required
+
+### Supported Formats
+The plugin supports any RGB-encoded elevation tiles with configurable decoders:
+
+- **AWS Terrarium** - Default format, free to use
+- **Mapbox Terrain-RGB** - Requires Mapbox access token
+- **NextZen Terrarium** - Requires API key
+- **Custom formats** - Define your own elevation extractor function
 
 ## Performance Notes
 
-- Tiles are cached to prevent redundant network requests (LIFO cache, max 50 tiles)
+- Tiles are cached to prevent redundant network requests (LIFO cache, default 50 tiles, configurable via `maxCacheSize`)
 - Abort controllers cancel pending requests when tiles are unloaded
 - Cross-tile boundary handling requires 3x3 tile grids for accurate gradient calculations
 - Latitude correction applied to pixel scaling for accurate slope measurements
+- Increase `maxCacheSize` for large maps or when panning frequently
 
 ## Browser Support
 
