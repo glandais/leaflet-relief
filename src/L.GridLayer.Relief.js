@@ -51,12 +51,39 @@ const _defaultElevationUrl = function(z, x, y) {
 };
 
 /**
- * _ElevationTileManager - Manages elevation data fetching and caching
+ * Default hillshade color function (grayscale)
+ * @param {number} intensity - Light intensity (0-1)
+ * @returns {Array} RGB values [r, g, b]
+ */
+const _defaultHillshadeColorFunction = function(intensity) {
+    const value = Math.round(intensity * 255);
+    return [value, value, value];
+};
+
+/**
+ * Extract elevation from RGBA pixel data
+ * @param {Uint8ClampedArray} tileData - Tile pixel data
+ * @param {number} i - Pixel row
+ * @param {number} j - Pixel column
+ * @param {Function} elevationExtractor - Extraction function
+ * @returns {number} Elevation in meters
+ */
+const _extractElevation = function(tileData, i, j, elevationExtractor) {
+    const pixelIndex = (i * 256 + j) * 4;
+    const r = tileData[pixelIndex];
+    const g = tileData[pixelIndex + 1];
+    const b = tileData[pixelIndex + 2];
+    const a = tileData[pixelIndex + 3];
+    return elevationExtractor(r, g, b, a);
+};
+
+/**
+ * _TileCache - Manages elevation data fetching and caching
  *
  * This class handles fetching elevation tiles from configurable sources,
  * with support for custom URL patterns and elevation extraction functions.
  */
-class _ElevationTileManager {
+class _TileCache {
     constructor(options = {}) {
         this.tileCache = new Map();
         this.accessOrder = [];
@@ -64,33 +91,6 @@ class _ElevationTileManager {
         this.elevationUrl = options.elevationUrl || _defaultElevationUrl;
         this.elevationExtractor = options.elevationExtractor || _defaultElevationExtractor;
         this.pendingRequests = new Map();
-    }
-
-    async getElevation(z, x, y, i, j) {
-        let tileX = x;
-        let tileY = y;
-        let pixelI = j;
-        let pixelJ = i;
-
-        while (pixelI < 0) {
-            tileY--;
-            pixelI += 256;
-        }
-        while (pixelI > 255) {
-            tileY++;
-            pixelI -= 256;
-        }
-        while (pixelJ < 0) {
-            tileX--;
-            pixelJ += 256;
-        }
-        while (pixelJ > 255) {
-            tileX++;
-            pixelJ -= 256;
-        }
-
-        const tileData = await this.getTile(z, tileX, tileY);
-        return this.extractElevation(tileData, pixelI, pixelJ);
     }
 
     async getTile(z, x, y, abortSignal) {
@@ -155,35 +155,18 @@ class _ElevationTileManager {
         this.accessOrder.push(tileKey);
     }
 
-    extractElevation(tileData, i, j) {
-        const pixelIndex = (i * 256 + j) * 4;
-        const r = tileData[pixelIndex];
-        const g = tileData[pixelIndex + 1];
-        const b = tileData[pixelIndex + 2];
-        const a = tileData[pixelIndex + 3];
-        return this.elevationExtractor(r, g, b, a);
-    }
-
-    clearCache() {
-        this.tileCache.clear();
-        this.accessOrder = [];
-    }
-
-    getCacheSize() {
-        return this.tileCache.size;
-    }
 }
 
-// We'll create the elevation manager per layer instance instead of singleton
+// We'll create the tile cache per layer instance instead of singleton
 // to support different elevation sources per layer
 
 /**
  * _ElevationCache - Local cache for a 3x3 grid of elevation tiles
  */
 class _ElevationCache {
-    constructor(elevationManager) {
+    constructor(tileCache) {
         this.tiles = new Map();
-        this.elevationManager = elevationManager;
+        this.tileCache = tileCache;
     }
 
     async init(z, x, y, abortSignal) {
@@ -192,7 +175,7 @@ class _ElevationCache {
                 let rx = x + dx;
                 let ry = y + dy;
                 const tileKey = `${z}/${rx}/${ry}`;
-                this.tiles.set(tileKey, await this.elevationManager.getTile(z, rx, ry, abortSignal));
+                this.tiles.set(tileKey, await this.tileCache.getTile(z, rx, ry, abortSignal));
             }
         }
     }
@@ -222,7 +205,7 @@ class _ElevationCache {
 
         const tileKey = `${z}/${tileX}/${tileY}`;
         const tileData = this.tiles.get(tileKey);
-        return this.elevationManager.extractElevation(tileData, pixelI, pixelJ);
+        return _extractElevation(tileData, pixelI, pixelJ, this.tileCache.elevationExtractor);
     }
 }
 
@@ -245,7 +228,7 @@ const _fillHillshadeTile = async (data, coords, abortSignal, layer) => {
     const a2 = Math.cos(beta) * Math.sin(alpha);
     const a3 = Math.cos(beta) * Math.cos(alpha);
 
-    const elevationCache = new _ElevationCache(layer.elevationManager);
+    const elevationCache = new _ElevationCache(layer.tileCache);
     await elevationCache.init(z, x, y, abortSignal);
 
     for (let i = 0; i < 256; i++) {
@@ -268,9 +251,10 @@ const _fillHillshadeTile = async (data, coords, abortSignal, layer) => {
                 var L = (a1 - a2 * dzdx - a3 * dzdy) / Math.sqrt(1 + dzdx ** 2 + dzdy ** 2);
                 if (L < 0) L = 0;
                 L = Math.sqrt(L * .8 + .2);
-                r = Math.round(L * 255);
-                g = Math.round(L * 255);
-                b = Math.round(L * 255);
+                const [colorR, colorG, colorB] = layer.hillshadeColorFunction(L);
+                r = colorR;
+                g = colorG;
+                b = colorB;
             } else {
                 a = 0;
             }
@@ -371,7 +355,7 @@ const _fillSlopeTile = async (data, coords, abortSignal, layer) => {
     const clampedLatitude = Math.max(-89.9, Math.min(89.9, latitude));
     const pixelSizeMeters = Math.max(0.1, metersPerPixelEquator * Math.cos(clampedLatitude * Math.PI / 180));
 
-    const elevationCache = new _ElevationCache(layer.elevationManager);
+    const elevationCache = new _ElevationCache(layer.tileCache);
     await elevationCache.init(z, x, y, abortSignal);
 
     for (let i = 0; i < 256; i++) {
@@ -436,9 +420,10 @@ L.GridLayer.Relief = L.GridLayer.extend({
         // Configure hillshade parameters (only used in hillshade mode)
         this.azimuth = (options && typeof options.azimuth === 'number') ? options.azimuth : 315;
         this.elevation = (options && typeof options.elevation === 'number') ? options.elevation : 45;
+        this.hillshadeColorFunction = (options && options.hillshadeColorFunction) || _defaultHillshadeColorFunction;
 
-        // Create elevation manager with custom options
-        this.elevationManager = new _ElevationTileManager({
+        // Create tile cache with custom options
+        this.tileCache = new _TileCache({
             maxCacheSize: (options && options.maxCacheSize) || 50,
             elevationUrl: (options && options.elevationUrl) || _defaultElevationUrl,
             elevationExtractor: (options && options.elevationExtractor) || _defaultElevationExtractor

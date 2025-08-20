@@ -93,6 +93,7 @@
             <li><strong>Hillshade Mode:</strong> Simulates sunlight on terrain to show relief</li>
             <li><strong>Slope Mode:</strong> Colors terrain by steepness (green = flat, red = steep)</li>
             <li><strong>Interactive Controls:</strong> Adjust sun azimuth and elevation in real-time</li>
+            <li><strong>Color Schemes:</strong> Choose from grayscale, sepia, blue-tinted, green-tinted, or warm color schemes for hillshade</li>
         </ul>
     </div>
     
@@ -115,6 +116,15 @@
             <label for="elevationSlider" style="margin-left: 20px;">Elevation:</label>
             <input type="range" id="elevationSlider" min="0" max="90" value="45">
             <span id="elevationValue">45°</span>
+            
+            <label for="colorSchemeSelect" style="margin-left: 20px;">Color:</label>
+            <select id="colorSchemeSelect" style="padding: 4px; border-radius: 3px; border: 1px solid #ccc;">
+                <option value="grayscale">Grayscale</option>
+                <option value="sepia">Sepia</option>
+                <option value="blue">Blue Tinted</option>
+                <option value="green">Green Tinted</option>
+                <option value="warm">Warm</option>
+            </select>
         </div>
     </div>
     
@@ -128,8 +138,44 @@
     <script src="src/L.GridLayer.Relief.js"></script>
     
     <script>
-        // Initialize the map centered on Mount Hood, Oregon (good terrain example)
-        const map = L.map('map').setView([45.3731, -121.7057], 12);
+        // Color scheme functions for hillshade
+        const colorSchemes = {
+            grayscale: function(intensity) {
+                const value = Math.round(intensity * 255);
+                return [value, value, value];
+            },
+            sepia: function(intensity) {
+                return [
+                    Math.round(intensity * 255),  // Red
+                    Math.round(intensity * 240),  // Green
+                    Math.round(intensity * 200)   // Blue
+                ];
+            },
+            blue: function(intensity) {
+                return [
+                    Math.round(intensity * 200),  // Red
+                    Math.round(intensity * 220),  // Green
+                    Math.round(intensity * 255)   // Blue
+                ];
+            },
+            green: function(intensity) {
+                return [
+                    Math.round(intensity * 180),  // Red
+                    Math.round(intensity * 255),  // Green
+                    Math.round(intensity * 200)   // Blue
+                ];
+            },
+            warm: function(intensity) {
+                return [
+                    Math.round(intensity * 255),  // Red
+                    Math.round(intensity * 200),  // Green
+                    Math.round(intensity * 150)   // Blue
+                ];
+            }
+        };
+
+        // Initialize the map centered on Mont Blanc, France (good terrain example)
+        const map = L.map('map').setView([45.8326, 6.8652], 12);
         
         // Add OpenStreetMap base layer
         const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -142,6 +188,7 @@
             mode: 'hillshade',
             azimuth: 315,
             elevation: 45,
+            hillshadeColorFunction: colorSchemes.grayscale,
             opacity: 0.6,
             zIndex: 100
         });
@@ -157,6 +204,7 @@
         const azimuthValue = document.getElementById('azimuthValue');
         const elevationSlider = document.getElementById('elevationSlider');
         const elevationValue = document.getElementById('elevationValue');
+        const colorSchemeSelect = document.getElementById('colorSchemeSelect');
         const hillshadeControls = document.getElementById('hillshadeControls');
         
         let reliefVisible = true;
@@ -170,6 +218,7 @@
                     mode: 'hillshade',
                     azimuth: parseInt(azimuthSlider.value),
                     elevation: parseInt(elevationSlider.value),
+                    hillshadeColorFunction: colorSchemes[colorSchemeSelect.value],
                     opacity: opacitySlider.value / 100,
                     zIndex: 100
                 });
@@ -258,12 +307,29 @@
             }
         });
         
+        // Color scheme control
+        colorSchemeSelect.addEventListener('change', (e) => {
+            if (reliefVisible && reliefLayer.mode === 'hillshade') {
+                // Recreate layer with new color scheme
+                map.removeLayer(reliefLayer);
+                reliefLayer = L.gridLayer.relief({
+                    mode: 'hillshade',
+                    azimuth: parseInt(azimuthSlider.value),
+                    elevation: parseInt(elevationSlider.value),
+                    hillshadeColorFunction: colorSchemes[e.target.value],
+                    opacity: opacitySlider.value / 100,
+                    zIndex: 100
+                });
+                reliefLayer.addTo(map);
+            }
+        });
+        
         // Add some location presets for easy navigation
         const locations = [
-            { name: 'Mount Hood, OR', coords: [45.3731, -121.7057], zoom: 12 },
-            { name: 'Grand Canyon, AZ', coords: [36.1069, -112.1129], zoom: 11 },
-            { name: 'Mount Rainier, WA', coords: [46.8523, -121.7603], zoom: 11 },
-            { name: 'Yosemite Valley, CA', coords: [37.7459, -119.5936], zoom: 12 }
+            { name: 'Mont Blanc, Chamonix', coords: [45.8326, 6.8652], zoom: 12 },
+            { name: 'Cirque de Gavarnie, Pyrénées', coords: [42.7316, -0.0066], zoom: 13 },
+            { name: 'Mont Ventoux, Provence', coords: [44.1712, 5.2786], zoom: 12 },
+            { name: 'Pic du Midi, Pyrénées', coords: [42.9367, 0.1417], zoom: 13 }
         ];
         
         // Add location selector

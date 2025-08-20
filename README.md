@@ -58,6 +58,33 @@ const customHillshade = L.gridLayer.relief({
 customHillshade.addTo(map);
 ```
 
+### Custom Hillshade Colors
+```javascript
+// Blue-tinted hillshade
+const blueHillshade = L.gridLayer.relief({
+    mode: 'hillshade',
+    hillshadeColorFunction: function(intensity) {
+        // Create blue-tinted relief
+        const r = Math.round(intensity * 200);
+        const g = Math.round(intensity * 220);
+        const b = Math.round(intensity * 255);
+        return [r, g, b];
+    }
+});
+
+// Sepia-toned hillshade
+const sepiaHillshade = L.gridLayer.relief({
+    mode: 'hillshade',
+    hillshadeColorFunction: function(intensity) {
+        // Create sepia-toned relief
+        const r = Math.round(intensity * 255);
+        const g = Math.round(intensity * 240);
+        const b = Math.round(intensity * 200);
+        return [r, g, b];
+    }
+});
+```
+
 ### Runtime Sun Position Changes
 ```javascript
 // Create hillshade layer
@@ -190,6 +217,7 @@ Available via `L.GridLayer.Relief.elevationExtractors`:
 | `mode` | `String` | `'hillshade'` | Visualization mode: `'hillshade'` or `'slope'` |
 | `azimuth` | `Number` | `315` | Sun azimuth angle in degrees (0-360°) for hillshade mode |
 | `elevation` | `Number` | `45` | Sun elevation angle in degrees (0-90°) for hillshade mode |
+| `hillshadeColorFunction` | `Function` | Grayscale | Custom color function for hillshade mode `function(intensity)` returns `[r, g, b]` |
 | `elevationUrl` | `String/Function` | AWS Terrarium | Custom elevation tile URL pattern or function |
 | `elevationExtractor` | `Function` | Terrarium decoder | Custom function to extract elevation from RGBA values |
 | `maxCacheSize` | `Number` | `50` | Maximum number of elevation tiles to cache |
