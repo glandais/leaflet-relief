@@ -192,13 +192,14 @@ class _ElevationCache {
 /**
  * fillHillshadeTile - Renders hillshade effect for a single map tile
  */
-const _fillHillshadeTile = async (data, coords, abortSignal) => {
+const _fillHillshadeTile = async (data, coords, abortSignal, layer) => {
     const x = coords.x;
     const y = coords.y;
     const z = coords.z;
 
-    const azimuth = 315;
-    const elevation = 45;
+    // Use configurable azimuth and elevation from layer options
+    const azimuth = layer.azimuth;
+    const elevation = layer.elevation;
     const alpha = Math.PI / 180 * azimuth;
     const beta = Math.PI / 180 * elevation;
     const a1 = Math.sin(beta);
@@ -321,7 +322,7 @@ const _EARTH_CIRCUMFERENCE = 40075017;
 /**
  * fillSlopeTile - Renders slope visualization for a single map tile
  */
-const _fillSlopeTile = async (data, coords, abortSignal) => {
+const _fillSlopeTile = async (data, coords, abortSignal, layer) => {
     const x = coords.x;
     const y = coords.y;
     const z = coords.z;
@@ -393,8 +394,12 @@ L.GridLayer.Relief = L.GridLayer.extend({
         // Select rendering mode: 'hillshade' or 'slope'
         this.mode = (options && options.mode) || 'hillshade';
 
+        // Configure hillshade parameters (only used in hillshade mode)
+        this.azimuth = (options && typeof options.azimuth === 'number') ? options.azimuth : 315;
+        this.elevation = (options && typeof options.elevation === 'number') ? options.elevation : 45;
+
         // Assign the appropriate rendering function based on mode
-        // These functions are defined in relief_hillshade.js and relief_slope.js
+        // These functions are defined internally above
         if (this.mode === 'hillshade') {
             this.fillTile = _fillHillshadeTile;
         } else {
@@ -454,7 +459,7 @@ L.GridLayer.Relief = L.GridLayer.extend({
             try {
                 // Call the mode-specific rendering function (hillshade or slope)
                 // This will fetch elevation data and calculate colors for each pixel
-                await this.fillTile(imageData.data, coords, abortController.signal);
+                await this.fillTile(imageData.data, coords, abortController.signal, this);
 
                 // Only render if the request wasn't aborted
                 if (!abortController.signal.aborted) {
@@ -476,6 +481,75 @@ L.GridLayer.Relief = L.GridLayer.extend({
 
         // Return the canvas immediately (it will be filled asynchronously)
         return tile;
+    },
+
+    /**
+     * Set azimuth angle for hillshade lighting and redraw tiles
+     * @param {number} azimuth - Azimuth angle in degrees (0-360)
+     */
+    setAzimuth: function(azimuth) {
+        if (typeof azimuth === 'number' && azimuth >= 0 && azimuth <= 360) {
+            this.azimuth = azimuth;
+            if (this.mode === 'hillshade') {
+                this.redraw();
+            }
+        }
+        return this;
+    },
+
+    /**
+     * Set elevation angle for hillshade lighting and redraw tiles
+     * @param {number} elevation - Elevation angle in degrees (0-90)
+     */
+    setElevation: function(elevation) {
+        if (typeof elevation === 'number' && elevation >= 0 && elevation <= 90) {
+            this.elevation = elevation;
+            if (this.mode === 'hillshade') {
+                this.redraw();
+            }
+        }
+        return this;
+    },
+
+    /**
+     * Get current azimuth angle
+     * @returns {number} Current azimuth in degrees
+     */
+    getAzimuth: function() {
+        return this.azimuth;
+    },
+
+    /**
+     * Get current elevation angle
+     * @returns {number} Current elevation in degrees
+     */
+    getElevation: function() {
+        return this.elevation;
+    },
+
+    /**
+     * Set both azimuth and elevation angles and redraw tiles
+     * @param {number} azimuth - Azimuth angle in degrees (0-360)
+     * @param {number} elevation - Elevation angle in degrees (0-90)
+     */
+    setSunPosition: function(azimuth, elevation) {
+        let needsRedraw = false;
+        
+        if (typeof azimuth === 'number' && azimuth >= 0 && azimuth <= 360) {
+            this.azimuth = azimuth;
+            needsRedraw = true;
+        }
+        
+        if (typeof elevation === 'number' && elevation >= 0 && elevation <= 90) {
+            this.elevation = elevation;
+            needsRedraw = true;
+        }
+        
+        if (needsRedraw && this.mode === 'hillshade') {
+            this.redraw();
+        }
+        
+        return this;
     }
 });
 

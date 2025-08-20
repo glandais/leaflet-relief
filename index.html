@@ -92,6 +92,7 @@
         <ul>
             <li><strong>Hillshade Mode:</strong> Simulates sunlight on terrain to show relief</li>
             <li><strong>Slope Mode:</strong> Colors terrain by steepness (green = flat, red = steep)</li>
+            <li><strong>Interactive Controls:</strong> Adjust sun azimuth and elevation in real-time</li>
         </ul>
     </div>
     
@@ -104,6 +105,16 @@
             <label for="opacitySlider">Opacity:</label>
             <input type="range" id="opacitySlider" min="0" max="100" value="60">
             <span id="opacityValue">60%</span>
+        </div>
+        
+        <div class="opacity-control" id="hillshadeControls" style="display: flex;">
+            <label for="azimuthSlider">Azimuth:</label>
+            <input type="range" id="azimuthSlider" min="0" max="360" value="315">
+            <span id="azimuthValue">315°</span>
+            
+            <label for="elevationSlider" style="margin-left: 20px;">Elevation:</label>
+            <input type="range" id="elevationSlider" min="0" max="90" value="45">
+            <span id="elevationValue">45°</span>
         </div>
     </div>
     
@@ -129,6 +140,8 @@
         // Create relief layer (starts with hillshade mode)
         let reliefLayer = L.gridLayer.relief({
             mode: 'hillshade',
+            azimuth: 315,
+            elevation: 45,
             opacity: 0.6,
             zIndex: 100
         });
@@ -140,6 +153,11 @@
         const toggleBtn = document.getElementById('toggleBtn');
         const opacitySlider = document.getElementById('opacitySlider');
         const opacityValue = document.getElementById('opacityValue');
+        const azimuthSlider = document.getElementById('azimuthSlider');
+        const azimuthValue = document.getElementById('azimuthValue');
+        const elevationSlider = document.getElementById('elevationSlider');
+        const elevationValue = document.getElementById('elevationValue');
+        const hillshadeControls = document.getElementById('hillshadeControls');
         
         let reliefVisible = true;
         
@@ -150,6 +168,8 @@
                 map.removeLayer(reliefLayer);
                 reliefLayer = L.gridLayer.relief({
                     mode: 'hillshade',
+                    azimuth: parseInt(azimuthSlider.value),
+                    elevation: parseInt(elevationSlider.value),
                     opacity: opacitySlider.value / 100,
                     zIndex: 100
                 });
@@ -161,6 +181,15 @@
             
             hillshadeBtn.classList.add('active');
             slopeBtn.classList.remove('active');
+            hillshadeControls.style.display = 'flex';
+            
+            // Sync slider values with layer settings if layer exists
+            if (reliefLayer && reliefLayer.getAzimuth && reliefLayer.getElevation) {
+                azimuthSlider.value = reliefLayer.getAzimuth();
+                azimuthValue.textContent = reliefLayer.getAzimuth() + '°';
+                elevationSlider.value = reliefLayer.getElevation();
+                elevationValue.textContent = reliefLayer.getElevation() + '°';
+            }
         });
         
         slopeBtn.addEventListener('click', () => {
@@ -180,6 +209,7 @@
             
             slopeBtn.classList.add('active');
             hillshadeBtn.classList.remove('active');
+            hillshadeControls.style.display = 'none';
         });
         
         toggleBtn.addEventListener('click', () => {
@@ -203,6 +233,28 @@
                 reliefLayer.setOpacity(opacity);
             } else {
                 reliefLayer.options.opacity = opacity;
+            }
+        });
+        
+        // Azimuth control
+        azimuthSlider.addEventListener('input', (e) => {
+            const azimuth = parseInt(e.target.value);
+            azimuthValue.textContent = azimuth + '°';
+            
+            if (reliefVisible && reliefLayer.mode === 'hillshade') {
+                // Update azimuth at runtime (automatically redraws)
+                reliefLayer.setAzimuth(azimuth);
+            }
+        });
+        
+        // Elevation control
+        elevationSlider.addEventListener('input', (e) => {
+            const elevation = parseInt(e.target.value);
+            elevationValue.textContent = elevation + '°';
+            
+            if (reliefVisible && reliefLayer.mode === 'hillshade') {
+                // Update elevation at runtime (automatically redraws)
+                reliefLayer.setElevation(elevation);
             }
         });
         

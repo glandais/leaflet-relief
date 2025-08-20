@@ -45,6 +45,37 @@ const hillshadeLayer = L.gridLayer.relief({
 hillshadeLayer.addTo(map);
 ```
 
+### Custom Sun Position
+```javascript
+// Create hillshade with custom sun position
+const customHillshade = L.gridLayer.relief({
+    mode: 'hillshade',
+    azimuth: 135,     // Southeast sun direction
+    elevation: 60,    // High sun angle
+    opacity: 0.7
+});
+
+customHillshade.addTo(map);
+```
+
+### Runtime Sun Position Changes
+```javascript
+// Create hillshade layer
+const hillshade = L.gridLayer.relief({ mode: 'hillshade' });
+hillshade.addTo(map);
+
+// Change sun position at runtime (automatically redraws)
+hillshade.setAzimuth(90);        // East lighting
+hillshade.setElevation(30);      // Lower sun angle
+
+// Or set both at once (single redraw)
+hillshade.setSunPosition(180, 60); // South lighting, high sun
+
+// Get current values
+console.log('Azimuth:', hillshade.getAzimuth());
+console.log('Elevation:', hillshade.getElevation());
+```
+
 ### Slope Analysis Layer
 ```javascript
 // Create a slope analysis layer
@@ -108,6 +139,8 @@ Extends `L.GridLayer` to provide terrain visualization capabilities.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `mode` | `String` | `'hillshade'` | Visualization mode: `'hillshade'` or `'slope'` |
+| `azimuth` | `Number` | `315` | Sun azimuth angle in degrees (0-360°) for hillshade mode |
+| `elevation` | `Number` | `45` | Sun elevation angle in degrees (0-90°) for hillshade mode |
 | `opacity` | `Number` | `1.0` | Layer opacity (0-1) |
 | `zIndex` | `Number` | `1` | Layer stacking order |
 
@@ -122,6 +155,14 @@ Inherits all methods from `L.GridLayer`. Key methods:
 - `redraw()` - Force layer to redraw all tiles
 - `setOpacity(opacity)` - Change layer opacity
 
+**Hillshade-specific methods:**
+
+- `setAzimuth(azimuth)` - Set sun azimuth angle (0-360°) and redraw
+- `setElevation(elevation)` - Set sun elevation angle (0-90°) and redraw
+- `setSunPosition(azimuth, elevation)` - Set both angles and redraw
+- `getAzimuth()` - Get current azimuth angle
+- `getElevation()` - Get current elevation angle
+
 #### Events
 
 Inherits all events from `L.GridLayer`:
@@ -135,7 +176,9 @@ Inherits all events from `L.GridLayer`:
 
 #### Hillshading
 - Uses surface normal vectors and sun direction dot product
-- Sun position: 315° azimuth, 45° elevation
+- Default sun position: 315° azimuth (northwest), 45° elevation
+- Azimuth angles: 0°=North, 90°=East, 180°=South, 270°=West
+- Elevation angles: 0°=horizon, 90°=directly overhead
 - Applies gamma correction and ambient lighting
 - No-data areas (elevation ≤ 0) rendered as transparent
 
