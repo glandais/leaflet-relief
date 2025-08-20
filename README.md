@@ -21,14 +21,16 @@ A Leaflet plugin for terrain visualization that renders relief maps showing hill
 
 ## Installation
 
-### NPM
-```bash
-npm install leaflet-relief
+### CDN (Recommended)
+```html
+<!-- Include from GitHub Pages -->
+<script src="https://glandais.github.io/leaflet-relief/src/L.GridLayer.Relief.js"></script>
 ```
 
-### CDN
+### Local Download
 ```html
-<script src="path/to/leaflet-relief/src/L.GridLayer.Relief.js"></script>
+<!-- Download and host locally -->
+<script src="path/to/L.GridLayer.Relief.js"></script>
 ```
 
 ## Usage
@@ -225,9 +227,37 @@ const customFunctionSlope = L.gridLayer.relief({
 ```
 
 ### Complete Example
+
+#### HTML Setup
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Relief Example</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <style>
+        #map { height: 500px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <!-- Relief Plugin -->
+    <script src="https://glandais.github.io/leaflet-relief/src/L.GridLayer.Relief.js"></script>
+</body>
+</html>
+```
+
+#### JavaScript Usage
 ```javascript
 // Initialize map
-const map = L.map('map').setView([45.5, -122.5], 12);
+const map = L.map('map').setView([45.8326, 6.8652], 12); // Mont Blanc, France
 
 // Add base layer
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -253,6 +283,7 @@ function switchToSlope() {
     // Create new slope layer
     const slopeLayer = L.gridLayer.relief({
         mode: 'slope',
+        slopeColorScheme: 'glacial',
         opacity: 0.6,
         zIndex: 100
     });
