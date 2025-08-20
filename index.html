@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Relief Plugin Demo</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        
+        #map {
+            height: 600px;
+            width: 100%;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+        }
+        
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .controls button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #007cad;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        .controls button:hover {
+            background: #005a82;
+        }
+        
+        .controls button.active {
+            background: #28a745;
+        }
+        
+        .controls button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .opacity-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: 20px;
+        }
+        
+        .opacity-control label {
+            font-weight: bold;
+        }
+        
+        .opacity-control input[type="range"] {
+            width: 150px;
+        }
+        
+        .info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #007cad;
+        }
+        
+        .info h2 {
+            margin-top: 0;
+            color: #007cad;
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h2>Leaflet Relief Plugin Demo</h2>
+        <p>This demo showcases the Leaflet Relief plugin with both hillshade and slope visualization modes. 
+           The plugin uses AWS Terrarium elevation tiles to create terrain visualizations.</p>
+        <ul>
+            <li><strong>Hillshade Mode:</strong> Simulates sunlight on terrain to show relief</li>
+            <li><strong>Slope Mode:</strong> Colors terrain by steepness (green = flat, red = steep)</li>
+        </ul>
+    </div>
+    
+    <div class="controls">
+        <button id="hillshadeBtn" class="active">Hillshade Mode</button>
+        <button id="slopeBtn">Slope Mode</button>
+        <button id="toggleBtn">Hide Relief</button>
+        
+        <div class="opacity-control">
+            <label for="opacitySlider">Opacity:</label>
+            <input type="range" id="opacitySlider" min="0" max="100" value="60">
+            <span id="opacityValue">60%</span>
+        </div>
+    </div>
+    
+    <div id="map"></div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Relief Plugin -->
+    <script src="src/relief_elevation.js"></script>
+    <script src="src/relief_hillshade.js"></script>
+    <script src="src/relief_slope.js"></script>
+    <script src="src/relief.js"></script>
+    
+    <script>
+        // Initialize the map centered on Mount Hood, Oregon (good terrain example)
+        const map = L.map('map').setView([45.3731, -121.7057], 12);
+        
+        // Add OpenStreetMap base layer
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+            attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+        
+        // Create relief layer (starts with hillshade mode)
+        let reliefLayer = new HillshadeLayer({
+            mode: 'hillshade',
+            opacity: 0.6,
+            zIndex: 100
+        });
+        reliefLayer.addTo(map);
+        
+        // Get control elements
+        const hillshadeBtn = document.getElementById('hillshadeBtn');
+        const slopeBtn = document.getElementById('slopeBtn');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const opacitySlider = document.getElementById('opacitySlider');
+        const opacityValue = document.getElementById('opacityValue');
+        
+        let reliefVisible = true;
+        
+        // Button event handlers
+        hillshadeBtn.addEventListener('click', () => {
+            if (reliefVisible) {
+                // Remove current layer and create new hillshade layer
+                map.removeLayer(reliefLayer);
+                reliefLayer = new HillshadeLayer({
+                    mode: 'hillshade',
+                    opacity: opacitySlider.value / 100,
+                    zIndex: 100
+                });
+                reliefLayer.addTo(map);
+            } else {
+                // Just update the stored layer mode for when it's shown
+                reliefLayer.options.mode = 'hillshade';
+            }
+            
+            hillshadeBtn.classList.add('active');
+            slopeBtn.classList.remove('active');
+        });
+        
+        slopeBtn.addEventListener('click', () => {
+            if (reliefVisible) {
+                // Remove current layer and create new slope layer
+                map.removeLayer(reliefLayer);
+                reliefLayer = new HillshadeLayer({
+                    mode: 'slope',
+                    opacity: opacitySlider.value / 100,
+                    zIndex: 100
+                });
+                reliefLayer.addTo(map);
+            } else {
+                // Just update the stored layer mode for when it's shown
+                reliefLayer.options.mode = 'slope';
+            }
+            
+            slopeBtn.classList.add('active');
+            hillshadeBtn.classList.remove('active');
+        });
+        
+        toggleBtn.addEventListener('click', () => {
+            if (reliefVisible) {
+                map.removeLayer(reliefLayer);
+                toggleBtn.textContent = 'Show Relief';
+                reliefVisible = false;
+            } else {
+                reliefLayer.addTo(map);
+                toggleBtn.textContent = 'Hide Relief';
+                reliefVisible = true;
+            }
+        });
+        
+        // Opacity control
+        opacitySlider.addEventListener('input', (e) => {
+            const opacity = e.target.value / 100;
+            opacityValue.textContent = e.target.value + '%';
+            
+            if (reliefVisible) {
+                reliefLayer.setOpacity(opacity);
+            } else {
+                reliefLayer.options.opacity = opacity;
+            }
+        });
+        
+        // Add some location presets for easy navigation
+        const locations = [
+            { name: 'Mount Hood, OR', coords: [45.3731, -121.7057], zoom: 12 },
+            { name: 'Grand Canyon, AZ', coords: [36.1069, -112.1129], zoom: 11 },
+            { name: 'Mount Rainier, WA', coords: [46.8523, -121.7603], zoom: 11 },
+            { name: 'Yosemite Valley, CA', coords: [37.7459, -119.5936], zoom: 12 }
+        ];
+        
+        // Add location selector
+        const locationSelect = document.createElement('select');
+        locationSelect.style.padding = '8px';
+        locationSelect.style.borderRadius = '5px';
+        locationSelect.style.border = '1px solid #ccc';
+        
+        // Add default option
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Choose a location...';
+        locationSelect.appendChild(defaultOption);
+        
+        // Add location options
+        locations.forEach(location => {
+            const option = document.createElement('option');
+            option.value = JSON.stringify(location);
+            option.textContent = location.name;
+            locationSelect.appendChild(option);
+        });
+        
+        locationSelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                const location = JSON.parse(e.target.value);
+                map.setView(location.coords, location.zoom);
+            }
+        });
+        
+        document.querySelector('.controls').appendChild(locationSelect);
+        
+        // Add map click handler to show coordinates (helpful for testing)
+        map.on('click', (e) => {
+            console.log('Clicked at:', e.latlng.lat.toFixed(6), e.latlng.lng.toFixed(6));
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+{
+  "name": "leaflet-relief",
+  "version": "1.0.0",
+  "description": "A Leaflet plugin for terrain visualization with hillshading and slope analysis using AWS Terrarium elevation data",
+  "main": "src/relief.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/glandais/leaflet-relief.git"
+  },
+  "keywords": [
+    "leaflet",
+    "plugin",
+    "terrain",
+    "hillshade",
+    "slope",
+    "relief",
+    "elevation",
+    "topographic",
+    "gis",
+    "mapping"
+  ],
+  "author": "glandais",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/glandais/leaflet-relief/issues"
+  },
+  "homepage": "https://github.com/glandais/leaflet-relief#readme",
+  "peerDependencies": {
+    "leaflet": "^1.0.0"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=12.0.0"
+  }
+}
