@@ -93,7 +93,8 @@
             <li><strong>Hillshade Mode:</strong> Simulates sunlight on terrain to show relief</li>
             <li><strong>Slope Mode:</strong> Colors terrain by steepness (green = flat, red = steep)</li>
             <li><strong>Interactive Controls:</strong> Adjust sun azimuth and elevation in real-time</li>
-            <li><strong>Color Schemes:</strong> Choose from grayscale, sepia, blue-tinted, green-tinted, or warm color schemes for hillshade</li>
+            <li><strong>Hillshade Colors:</strong> Choose from grayscale, sepia, blue-tinted, green-tinted, or warm color schemes</li>
+            <li><strong>Slope Colors:</strong> Choose from default, glacial, thermal, or earth color schemes for slope visualization</li>
         </ul>
     </div>
     
@@ -124,6 +125,16 @@
                 <option value="blue">Blue Tinted</option>
                 <option value="green">Green Tinted</option>
                 <option value="warm">Warm</option>
+            </select>
+        </div>
+        
+        <div class="opacity-control" id="slopeControls" style="display: none;">
+            <label for="slopeColorSelect" style="margin-left: 20px;">Color Scheme:</label>
+            <select id="slopeColorSelect" style="padding: 4px; border-radius: 3px; border: 1px solid #ccc;">
+                <option value="default">Default (Green→Red)</option>
+                <option value="glacial">Glacial (Blue→Red)</option>
+                <option value="thermal">Thermal (Purple→Yellow)</option>
+                <option value="earth">Earth (Green→Brown)</option>
             </select>
         </div>
     </div>
@@ -205,7 +216,9 @@
         const elevationSlider = document.getElementById('elevationSlider');
         const elevationValue = document.getElementById('elevationValue');
         const colorSchemeSelect = document.getElementById('colorSchemeSelect');
+        const slopeColorSelect = document.getElementById('slopeColorSelect');
         const hillshadeControls = document.getElementById('hillshadeControls');
+        const slopeControls = document.getElementById('slopeControls');
         
         let reliefVisible = true;
         
@@ -231,6 +244,7 @@
             hillshadeBtn.classList.add('active');
             slopeBtn.classList.remove('active');
             hillshadeControls.style.display = 'flex';
+            slopeControls.style.display = 'none';
             
             // Sync slider values with layer settings if layer exists
             if (reliefLayer && reliefLayer.getAzimuth && reliefLayer.getElevation) {
@@ -247,6 +261,7 @@
                 map.removeLayer(reliefLayer);
                 reliefLayer = L.gridLayer.relief({
                     mode: 'slope',
+                    slopeColorScheme: slopeColorSelect.value,
                     opacity: opacitySlider.value / 100,
                     zIndex: 100
                 });
@@ -259,6 +274,7 @@
             slopeBtn.classList.add('active');
             hillshadeBtn.classList.remove('active');
             hillshadeControls.style.display = 'none';
+            slopeControls.style.display = 'flex';
         });
         
         toggleBtn.addEventListener('click', () => {
@@ -317,6 +333,21 @@
                     azimuth: parseInt(azimuthSlider.value),
                     elevation: parseInt(elevationSlider.value),
                     hillshadeColorFunction: colorSchemes[e.target.value],
+                    opacity: opacitySlider.value / 100,
+                    zIndex: 100
+                });
+                reliefLayer.addTo(map);
+            }
+        });
+        
+        // Slope color scheme control
+        slopeColorSelect.addEventListener('change', (e) => {
+            if (reliefVisible && reliefLayer.mode === 'slope') {
+                // Recreate layer with new color scheme
+                map.removeLayer(reliefLayer);
+                reliefLayer = L.gridLayer.relief({
+                    mode: 'slope',
+                    slopeColorScheme: e.target.value,
                     opacity: opacitySlider.value / 100,
                     zIndex: 100
                 });

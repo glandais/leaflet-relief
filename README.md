@@ -156,6 +156,74 @@ const slopeLayer = L.gridLayer.relief({
 slopeLayer.addTo(map);
 ```
 
+### Custom Slope Colors
+
+#### Using Color Scheme Presets
+```javascript
+// Glacial theme (blue to white gradient)
+const glacialSlope = L.gridLayer.relief({
+    mode: 'slope',
+    slopeColorScheme: 'glacial'
+});
+
+// Thermal theme (purple to yellow gradient) 
+const thermalSlope = L.gridLayer.relief({
+    mode: 'slope',
+    slopeColorScheme: 'thermal'
+});
+
+// Earth theme (green to brown gradient)
+const earthSlope = L.gridLayer.relief({
+    mode: 'slope',
+    slopeColorScheme: 'earth'
+});
+```
+
+#### Custom HSV Configuration
+```javascript
+// Custom slope ranges and colors
+const customHsvSlope = L.gridLayer.relief({
+    mode: 'slope',
+    slopeColorConfig: [
+        { slope: { min: 0, max: 5 }, h: { min: 240, max: 200 } },   // Blue to cyan for flat
+        { slope: { min: 5, max: 15 }, h: { min: 200, max: 120 } },  // Cyan to green for gentle
+        { slope: { min: 15, max: 35 }, h: { min: 120, max: 60 } },  // Green to yellow for moderate  
+        { slope: { min: 35, max: 1000 }, h: { min: 60, max: 0 } }   // Yellow to red for steep
+    ]
+});
+
+// Edge case handling:
+// - Slopes below first range minimum: Use first range h.min (blue, 240°)
+// - Slopes above last range maximum: Use last range h.max (red, 0°)  
+// - Slopes within defined ranges: HSV interpolation between h.min and h.max
+// This ensures consistent colors at extremes without fallback defaults
+```
+
+#### Full Custom Function
+```javascript
+// Complete control over slope colors
+const customFunctionSlope = L.gridLayer.relief({
+    mode: 'slope',
+    slopeColorFunction: function(slopeDegrees) {
+        if (slopeDegrees < 5) {
+            // Flat areas: blue
+            return [100, 150, 255];
+        } else if (slopeDegrees < 20) {
+            // Moderate slopes: interpolate blue to yellow
+            const ratio = (slopeDegrees - 5) / 15;
+            return [
+                Math.round(100 + ratio * 155),  // Blue to yellow (red)
+                Math.round(150 + ratio * 105),  // Blue to yellow (green)
+                Math.round(255 - ratio * 255)   // Blue to yellow (blue)
+            ];
+        } else {
+            // Steep slopes: red
+            return [255, 100, 100];
+        }
+    }
+});
+```
+
 ### Complete Example
 ```javascript
 // Initialize map
@@ -218,11 +286,16 @@ Available via `L.GridLayer.Relief.elevationExtractors`:
 | `azimuth` | `Number` | `315` | Sun azimuth angle in degrees (0-360°) for hillshade mode |
 | `elevation` | `Number` | `45` | Sun elevation angle in degrees (0-90°) for hillshade mode |
 | `hillshadeColorFunction` | `Function` | Grayscale | Custom color function for hillshade mode `function(intensity)` returns `[r, g, b]` |
+| `slopeColorScheme` | `String` | `'default'` | Preset color scheme for slope mode: `'default'`, `'glacial'`, `'thermal'`, `'earth'` |
+| `slopeColorConfig` | `Array` | Default HSV | Custom HSV slope-to-hue mapping array for slope mode |
+| `slopeColorFunction` | `Function` | Default green→red | Custom color function for slope mode `function(slopeDegrees)` returns `[r, g, b]` |
 | `elevationUrl` | `String/Function` | AWS Terrarium | Custom elevation tile URL pattern or function |
 | `elevationExtractor` | `Function` | Terrarium decoder | Custom function to extract elevation from RGBA values |
 | `maxCacheSize` | `Number` | `50` | Maximum number of elevation tiles to cache |
 | `opacity` | `Number` | `1.0` | Layer opacity (0-1) |
 | `zIndex` | `Number` | `1` | Layer stacking order |
+
+**Note**: Slope color options are mutually exclusive (XOR): only one of `slopeColorScheme`, `slopeColorConfig`, or `slopeColorFunction` should be used.
 
 All standard [Leaflet GridLayer options](https://leafletjs.com/reference.html#gridlayer) are also supported.
 
@@ -265,8 +338,10 @@ Inherits all events from `L.GridLayer`:
 #### Slope Analysis
 - Calculates gradients using Horn's method with 8-neighbor kernel
 - Latitude-corrected pixel scaling for accurate measurements
-- Color mapping: Green (flat) → Red (steep)
-- Uses HSV color space for smooth gradients
+- **Color mapping**: Configurable HSV-based or custom RGB function
+- **Default scheme**: Green (flat, 120°) → Yellow (60°) → Orange (20°) → Red (steep, 0°/-60°)
+- **Edge case handling**: Uses first/last range colors for out-of-bounds slopes
+- Uses HSV color space for smooth gradients in preset schemes
 
 ## Data Sources
 

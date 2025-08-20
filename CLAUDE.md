@@ -45,7 +45,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 **Hillshading**: Uses surface normal vectors and sun direction dot product with gamma correction and ambient lighting. Default sun position: 315° azimuth (northwest), 45° elevation. Runtime configurable via `setAzimuth()`, `setElevation()`, or `setSunPosition()` methods.
 
-**Slope Calculation**: Horn's method with 8-neighbor kernel, latitude-corrected pixel scaling, and color gradients based on steepness ranges (green=flat, red=steep). Uses HSV color space for smooth transitions.
+**Slope Calculation**: Horn's method with 8-neighbor kernel, latitude-corrected pixel scaling, and configurable color schemes. Default: green→red gradient. HSV-based presets provide smooth transitions with automatic edge case handling (out-of-bounds slopes use first/last range colors).
 
 ## Development
 
@@ -86,6 +86,9 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 **Function Organization:**
 - `_extractElevation(tileData, i, j, elevationExtractor)` - Pure function for elevation extraction
 - `_defaultHillshadeColorFunction(intensity)` - Default grayscale color function for hillshade
+- `_createSlopeColorFunction(colorConfig)` - Generate slope color function from HSV config with edge case handling
+- `_defaultSlopeColorConfig` - Default green→red slope color scheme
+- `_slopeColorSchemes` - Preset slope color schemes (default, glacial, thermal, earth)
 - `_fillHillshadeTile(data, coords, abortSignal, layer)` - Hillshade rendering
 - `_fillSlopeTile(data, coords, abortSignal, layer)` - Slope rendering
 - Built-in elevation extractors: `_defaultElevationExtractor`, `_mapboxElevationExtractor`
@@ -106,6 +109,41 @@ const reliefLayer = L.gridLayer.relief({
     opacity: 0.6,             // Layer opacity
     maxCacheSize: 50          // Max elevation tiles in cache
 });
+```
+
+### Slope Color Configuration
+```javascript
+// Simple: Use preset color scheme
+const glacialSlope = L.gridLayer.relief({
+    mode: 'slope',
+    slopeColorScheme: 'glacial'  // 'default', 'glacial', 'thermal', 'earth'
+});
+
+// Intermediate: Custom HSV configuration  
+const customHsvSlope = L.gridLayer.relief({
+    mode: 'slope',
+    slopeColorConfig: [
+        { slope: { min: 0, max: 10 }, h: { min: 240, max: 120 } }, // Blue to green
+        { slope: { min: 10, max: 30 }, h: { min: 120, max: 60 } }, // Green to yellow
+        { slope: { min: 30, max: 1000 }, h: { min: 60, max: 0 } }  // Yellow to red
+    ]
+});
+
+// Advanced: Full custom function
+const advancedSlope = L.gridLayer.relief({
+    mode: 'slope',
+    slopeColorFunction: function(slopeDegrees) {
+        // Custom logic returning [r, g, b]
+        if (slopeDegrees < 5) return [100, 200, 255];  // Light blue for flat
+        if (slopeDegrees < 20) return [255, 200, 100]; // Orange for moderate  
+        return [255, 100, 100];                        // Red for steep
+    }
+});
+
+// Note: HSV configurations automatically handle edge cases:
+// - Slopes below first range min → first range h.min color
+// - Slopes above last range max → last range h.max color
+// - No unexpected fallback colors
 ```
 
 ### Runtime Sun Position Changes

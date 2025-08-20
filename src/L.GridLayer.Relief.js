@@ -306,30 +306,66 @@ const _slopeHsvToRgb = (h, s, v) => {
 };
 
 /**
- * Slope-to-color mapping configuration
+ * Default slope-to-color mapping configuration (green to red)
  */
-const _slopeH = [
-    { slope: { min: -1000, max: 0 }, h: { min: 120, max: 120 } },
-    { slope: { min: 0, max: 3 }, h: { min: 120, max: 60 } },
-    { slope: { min: 3, max: 9 }, h: { min: 60, max: 20 } },
-    { slope: { min: 9, max: 30 }, h: { min: 20, max: -20 } },
-    { slope: { min: 30, max: 60 }, h: { min: -20, max: -60 } },
-    { slope: { min: 60, max: 1000 }, h: { min: -60, max: -60 } }
+const _defaultSlopeColorConfig = [
+    { slope: { min: 0, max: 3 }, h: { min: 120, max: 60 } },    // Green to yellow for flat
+    { slope: { min: 3, max: 9 }, h: { min: 60, max: 20 } },     // Yellow to orange for gentle
+    { slope: { min: 9, max: 30 }, h: { min: 20, max: -20 } },   // Orange to red for moderate
+    { slope: { min: 30, max: 60 }, h: { min: -20, max: -60 } }  // Red for steep
 ];
 
 /**
- * Get RGB color for a given slope angle
+ * Predefined slope color schemes
  */
-const _getColorForSlope = (slopeDegrees) => {
-    for (let i = 0; i < _slopeH.length; i++) {
-        const range = _slopeH[i];
-        if (slopeDegrees >= range.slope.min && slopeDegrees <= range.slope.max) {
-            const slopeRatio = (slopeDegrees - range.slope.min) / (range.slope.max - range.slope.min);
-            const h = range.h.min + slopeRatio * (range.h.max - range.h.min);
-            return _slopeHsvToRgb(h, 1, 1);
+const _slopeColorSchemes = {
+    default: _defaultSlopeColorConfig,
+    glacial: [
+        { slope: { min: 0, max: 5 }, h: { min: 240, max: 200 } },   // Blue to cyan for flat
+        { slope: { min: 5, max: 15 }, h: { min: 200, max: 160 } },  // Cyan to light blue
+        { slope: { min: 15, max: 30 }, h: { min: 160, max: 120 } }, // Light blue to green
+        { slope: { min: 30, max: 60 }, h: { min: 120, max: 60 } },  // Green to yellow
+        { slope: { min: 60, max: 90 }, h: { min: 60, max: 0 } }     // Yellow to red for very steep
+    ],
+    thermal: [
+        { slope: { min: 0, max: 10 }, h: { min: 280, max: 320 } },  // Purple to magenta
+        { slope: { min: 10, max: 25 }, h: { min: 320, max: 360 } }, // Magenta to red  
+        { slope: { min: 25, max: 45 }, h: { min: 0, max: 40 } },    // Red to orange
+        { slope: { min: 45, max: 65 }, h: { min: 40, max: 60 } }    // Orange to yellow
+    ],
+    earth: [
+        { slope: { min: 0, max: 5 }, h: { min: 60, max: 40 } },     // Yellow-green to yellow
+        { slope: { min: 5, max: 15 }, h: { min: 40, max: 20 } },    // Yellow to orange
+        { slope: { min: 15, max: 35 }, h: { min: 20, max: 10 } },   // Orange to brown
+        { slope: { min: 35, max: 55 }, h: { min: 10, max: 0 } }     // Brown to red-brown
+    ]
+};
+
+/**
+ * Create a slope color function from HSV configuration
+ * @param {Array} colorConfig - Array of slope/hue range mappings
+ * @returns {Function} Function that takes slope degrees and returns [r, g, b]
+ */
+const _createSlopeColorFunction = function(colorConfig) {
+    return function(slopeDegrees) {
+        // Handle edge case: slope below first range minimum
+        if (slopeDegrees < colorConfig[0].slope.min) {
+            return _slopeHsvToRgb(colorConfig[0].h.min, 1, 1);
         }
-    }
-    return _slopeHsvToRgb(120, 1, 1);
+        
+        for (let i = 0; i < colorConfig.length; i++) {
+            const range = colorConfig[i];
+            if (slopeDegrees >= range.slope.min && slopeDegrees <= range.slope.max) {
+                const slopeRatio = (slopeDegrees - range.slope.min) / (range.slope.max - range.slope.min);
+                const h = range.h.min + slopeRatio * (range.h.max - range.h.min);
+                return _slopeHsvToRgb(h, 1, 1);
+            }
+        }
+        
+        // Handle edge case: slope above last range maximum
+        const lastRange = colorConfig[colorConfig.length - 1];
+        return _slopeHsvToRgb(lastRange.h.max, 1, 1);
+    };
 };
 
 /**
@@ -385,7 +421,7 @@ const _fillSlopeTile = async (data, coords, abortSignal, layer) => {
                 if (slopeDegrees < 0.5) {
                     a = 0;
                 } else {
-                    const slopeColor = _getColorForSlope(slopeDegrees);
+                    const slopeColor = layer.slopeColorFunction(slopeDegrees);
                     r = slopeColor[0];
                     g = slopeColor[1];
                     b = slopeColor[2];
@@ -421,6 +457,18 @@ L.GridLayer.Relief = L.GridLayer.extend({
         this.azimuth = (options && typeof options.azimuth === 'number') ? options.azimuth : 315;
         this.elevation = (options && typeof options.elevation === 'number') ? options.elevation : 45;
         this.hillshadeColorFunction = (options && options.hillshadeColorFunction) || _defaultHillshadeColorFunction;
+
+        // Configure slope color function (only used in slope mode) - XOR priority
+        if (options && options.slopeColorFunction) {
+            this.slopeColorFunction = options.slopeColorFunction;
+        } else if (options && options.slopeColorConfig) {
+            this.slopeColorFunction = _createSlopeColorFunction(options.slopeColorConfig);
+        } else if (options && options.slopeColorScheme) {
+            const scheme = _slopeColorSchemes[options.slopeColorScheme] || _slopeColorSchemes.default;
+            this.slopeColorFunction = _createSlopeColorFunction(scheme);
+        } else {
+            this.slopeColorFunction = _createSlopeColorFunction(_defaultSlopeColorConfig);
+        }
 
         // Create tile cache with custom options
         this.tileCache = new _TileCache({
