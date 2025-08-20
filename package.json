@@ -2,7 +2,7 @@
   "name": "leaflet-relief",
   "version": "1.0.0",
   "description": "A Leaflet plugin for terrain visualization with hillshading and slope analysis using AWS Terrarium elevation data",
-  "main": "src/relief.js",
+  "main": "src/L.GridLayer.Relief.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

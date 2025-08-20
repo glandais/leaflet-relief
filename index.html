@@ -114,10 +114,7 @@
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
     <!-- Relief Plugin -->
-    <script src="src/relief_elevation.js"></script>
-    <script src="src/relief_hillshade.js"></script>
-    <script src="src/relief_slope.js"></script>
-    <script src="src/relief.js"></script>
+    <script src="src/L.GridLayer.Relief.js"></script>
     
     <script>
         // Initialize the map centered on Mount Hood, Oregon (good terrain example)
@@ -130,7 +127,7 @@
         }).addTo(map);
         
         // Create relief layer (starts with hillshade mode)
-        let reliefLayer = new HillshadeLayer({
+        let reliefLayer = L.gridLayer.relief({
             mode: 'hillshade',
             opacity: 0.6,
             zIndex: 100
@@ -151,7 +148,7 @@
             if (reliefVisible) {
                 // Remove current layer and create new hillshade layer
                 map.removeLayer(reliefLayer);
-                reliefLayer = new HillshadeLayer({
+                reliefLayer = L.gridLayer.relief({
                     mode: 'hillshade',
                     opacity: opacitySlider.value / 100,
                     zIndex: 100
@@ -170,7 +167,7 @@
             if (reliefVisible) {
                 // Remove current layer and create new slope layer
                 map.removeLayer(reliefLayer);
-                reliefLayer = new HillshadeLayer({
+                reliefLayer = L.gridLayer.relief({
                     mode: 'slope',
                     opacity: opacitySlider.value / 100,
                     zIndex: 100

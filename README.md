@@ -28,10 +28,7 @@ npm install leaflet-relief
 
 ### CDN
 ```html
-<script src="path/to/leaflet-relief/src/relief.js"></script>
-<script src="path/to/leaflet-relief/src/relief_elevation.js"></script>
-<script src="path/to/leaflet-relief/src/relief_hillshade.js"></script>
-<script src="path/to/leaflet-relief/src/relief_slope.js"></script>
+<script src="path/to/leaflet-relief/src/L.GridLayer.Relief.js"></script>
 ```
 
 ## Usage
@@ -39,7 +36,7 @@ npm install leaflet-relief
 ### Basic Hillshade Layer
 ```javascript
 // Create a hillshade relief layer
-const hillshadeLayer = new HillshadeLayer({
+const hillshadeLayer = L.gridLayer.relief({
     mode: 'hillshade',
     opacity: 0.6
 });
@@ -51,7 +48,7 @@ hillshadeLayer.addTo(map);
 ### Slope Analysis Layer
 ```javascript
 // Create a slope analysis layer
-const slopeLayer = new HillshadeLayer({
+const slopeLayer = L.gridLayer.relief({
     mode: 'slope',
     opacity: 0.7
 });
@@ -71,7 +68,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 
 // Add relief layer with custom options
-const reliefLayer = new HillshadeLayer({
+const reliefLayer = L.gridLayer.relief({
     mode: 'hillshade',
     opacity: 0.6,
     zIndex: 100,
@@ -82,18 +79,29 @@ const reliefLayer = new HillshadeLayer({
 
 reliefLayer.addTo(map);
 
-// Switch between modes
+// Switch between modes dynamically
 function switchToSlope() {
-    reliefLayer.options.mode = 'slope';
-    reliefLayer.redraw();
+    // Remove current layer
+    map.removeLayer(reliefLayer);
+    // Create new slope layer
+    const slopeLayer = L.gridLayer.relief({
+        mode: 'slope',
+        opacity: 0.6,
+        zIndex: 100
+    });
+    slopeLayer.addTo(map);
 }
 ```
 
 ## API Reference
 
-### HillshadeLayer
+### L.GridLayer.Relief
 
 Extends `L.GridLayer` to provide terrain visualization capabilities.
+
+### Factory Function
+
+`L.gridLayer.relief(options)` - Creates a new relief layer instance.
 
 #### Constructor Options
 
