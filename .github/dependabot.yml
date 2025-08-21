@@ -20,12 +20,6 @@ updates:
       - "npm"
     assignees:
       - "glandais"
-    reviewers:
-      - "glandais"
-    ignore:
-      # Ignore major version updates for these packages (if needed)
-      # - dependency-name: "leaflet"
-      #   versions: ["2.x", "3.x"]
     groups:
       # Group all development dependencies together
       dev-dependencies:
@@ -53,6 +47,4 @@ updates:
       - "dependencies"
       - "github-actions"
     assignees:
-      - "glandais"
-    reviewers:
       - "glandais"
