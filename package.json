@@ -4,7 +4,9 @@
   "description": "A Leaflet plugin for terrain visualization with hillshading and slope analysis using AWS Terrarium elevation data",
   "main": "src/L.GridLayer.Relief.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
     "semantic-release": "semantic-release",
     "prepare": "husky"
   },
@@ -48,7 +50,11 @@
     "@semantic-release/git": "^10.0.1",
     "@semantic-release/github": "^11.0.4",
     "@semantic-release/npm": "^12.0.2",
+    "canvas": "^3.2.0",
     "husky": "^9.1.7",
+    "jest": "^30.0.5",
+    "jest-environment-jsdom": "^30.0.5",
+    "leaflet": "^1.9.4",
     "semantic-release": "^24.2.7"
   }
 }
