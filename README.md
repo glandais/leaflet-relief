@@ -2,6 +2,8 @@
 
 A Leaflet plugin for terrain visualization that renders relief maps showing hillshading and slope analysis. The plugin fetches elevation data from AWS Terrarium tiles and processes it to create visual overlays on Leaflet maps.
 
+📦 **[npm package](https://www.npmjs.com/package/leaflet-relief)** | 🌐 **[Live Demo](https://glandais.github.io/leaflet-relief/)**
+
 ## Demo
 
 🌐 **[Live Demo](https://glandais.github.io/leaflet-relief/)** - Try the plugin with interactive terrain visualization
