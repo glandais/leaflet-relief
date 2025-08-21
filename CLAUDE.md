@@ -52,9 +52,12 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 ### File Structure
 - `src/L.GridLayer.Relief.js` - Complete plugin implementation (all functionality in single file)
 - `index.html` - Interactive demo with controls for azimuth/elevation adjustment
+- `test/L.GridLayer.Relief.test.js` - Jest unit tests for plugin functionality
 - `README.md` - Comprehensive plugin documentation
-- `package.json` - NPM package configuration
+- `package.json` - NPM package configuration with semantic-release
 - `LICENSE` - MIT license
+- `.github/workflows/release.yml` - CI/CD pipeline for automated releases
+- `.releaserc.json` - Semantic-release configuration
 
 ### Key Features
 - **Runtime Configuration**: Azimuth and elevation angles adjustable at runtime with automatic tile rerendering
@@ -66,6 +69,19 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 ### External Dependencies
 - Leaflet (peer dependency ^1.0.0)
 - Default elevation source: AWS Terrarium tiles (https://s3.amazonaws.com/elevation-tiles-prod/terrarium/)
+
+### Testing & Quality
+- **Jest Testing**: 25+ unit tests covering all major functionality
+- **Coverage**: ~68% code coverage with thresholds set at 50%
+- **Mocking**: Canvas API and network requests properly mocked for testing
+- **CI Integration**: Tests run automatically on all commits and before releases
+
+### Release Workflow
+- **Semantic Release**: Automated version management based on commit messages
+- **Conventional Commits**: Enforced via commitlint and husky hooks
+- **npm Publishing**: Automatic publishing to npm registry on successful releases
+- **GitHub Releases**: Automatic creation with generated changelogs
+- **Dependabot**: Weekly dependency updates with grouped PRs for dev dependencies
 
 ### Performance Considerations
 - `_TileCache` prevents redundant network requests (LIFO cache, default 50 tiles, configurable via `maxCacheSize`)
@@ -168,3 +184,40 @@ const customRelief = L.gridLayer.relief({
 - `L.GridLayer.Relief.elevationExtractors.terrarium` - AWS Terrarium (default)
 - `L.GridLayer.Relief.elevationExtractors.mapbox` - Mapbox Terrain-RGB
 - `L.GridLayer.Relief.elevationExtractors.custom(fn)` - Custom wrapper function
+
+## Development Commands
+
+### Testing
+```bash
+npm test                # Run all tests
+npm run test:watch      # Run tests in watch mode
+npm run test:coverage   # Generate coverage report
+```
+
+### Release (Automated)
+Releases happen automatically when commits are pushed to the `develop` branch:
+- Semantic-release analyzes commits
+- Determines version bump (patch/minor/major)
+- Updates package.json version
+- Generates CHANGELOG.md
+- Publishes to npm
+- Creates GitHub release
+
+### Manual Release Check
+```bash
+npx semantic-release --dry-run  # Preview what would be released
+```
+
+### Commit Guidelines
+```bash
+# Features
+git commit -m "feat: add dynamic sun position controls"
+
+# Bug fixes  
+git commit -m "fix: correct azimuth calculation in hillshade mode"
+
+# Breaking changes
+git commit -m "feat!: change default elevation source
+
+BREAKING CHANGE: Default elevation source changed from AWS to Mapbox"
+```

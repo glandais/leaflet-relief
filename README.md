@@ -21,10 +21,26 @@ A Leaflet plugin for terrain visualization that renders relief maps showing hill
 
 ## Installation
 
-### CDN (Recommended)
+### npm
+```bash
+npm install leaflet-relief
+```
+
+```javascript
+// ES6 import
+import 'leaflet-relief';
+
+// CommonJS
+require('leaflet-relief');
+```
+
+### CDN
 ```html
-<!-- Include from GitHub Pages -->
-<script src="https://glandais.github.io/leaflet-relief/src/L.GridLayer.Relief.js"></script>
+<!-- Include from jsDelivr -->
+<script src="https://cdn.jsdelivr.net/npm/leaflet-relief@latest/src/L.GridLayer.Relief.js"></script>
+
+<!-- Or from unpkg -->
+<script src="https://unpkg.com/leaflet-relief@latest/src/L.GridLayer.Relief.js"></script>
 ```
 
 ### Local Download
@@ -405,6 +421,56 @@ The plugin supports any RGB-encoded elevation tiles with configurable decoders:
 - Firefox 55+
 - Safari 11+
 - Mobile browsers with Canvas support
+
+## Development
+
+### Setup
+```bash
+# Clone repository
+git clone https://github.com/glandais/leaflet-relief.git
+cd leaflet-relief
+
+# Install dependencies
+npm install
+```
+
+### Testing
+```bash
+# Run tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Generate coverage report
+npm run test:coverage
+```
+
+### Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. **Commit Convention**: Use [Conventional Commits](https://www.conventionalcommits.org/)
+   - `feat:` New features
+   - `fix:` Bug fixes
+   - `docs:` Documentation changes
+   - `test:` Test additions or changes
+   - `chore:` Maintenance tasks
+
+2. **Testing**: Add tests for new features
+3. **Code Style**: Follow existing patterns in the codebase
+
+### Release Process
+
+This project uses [semantic-release](https://semantic-release.gitbook.io/) for automated versioning and releases:
+
+- **Automatic Version Bumping**: Based on commit messages
+  - `fix:` → Patch release (1.0.0 → 1.0.1)
+  - `feat:` → Minor release (1.0.0 → 1.1.0)
+  - `BREAKING CHANGE:` → Major release (1.0.0 → 2.0.0)
+- **npm Publishing**: Automatically publishes to npm registry
+- **GitHub Releases**: Creates releases with changelogs
+- **Continuous Integration**: Tests run on all commits
 
 ## License
 
