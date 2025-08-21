@@ -442,6 +442,10 @@ const _fillSlopeTile = async (data, coords, abortSignal, layer) => {
 // ====================== MAIN PLUGIN CLASS ======================
 L.GridLayer.Relief = L.GridLayer.extend({
 
+    options: {
+        attribution: '&copy; <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank">Mapzen Elevation</a>'
+    },
+
     initialize: function(options) {
         // Set global bounds if noWrap is enabled to prevent tile wrapping
         if (options && options.noWrap && !options.bounds) {

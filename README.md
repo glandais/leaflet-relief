@@ -12,12 +12,17 @@ A Leaflet plugin for terrain visualization that renders relief maps showing hill
 - **Slope Mode**: Colors terrain based on steepness/gradient analysis
 - **High Performance**: Async tile loading with abort controllers to prevent memory leaks
 - **Cross-tile Boundaries**: Accurate calculations using 3x3 tile grids for gradient computation
+- **Attribution**: Automatically includes proper attribution for Mapzen elevation data
 
 ## Requirements
 
 - **Leaflet**: `^1.0.0`
 - **Browser Compatibility**: Modern browsers supporting Canvas API and ES6 classes
 - **Network Access**: Requires access to AWS Terrarium elevation tiles
+
+## Data Attribution
+
+The plugin uses elevation data from AWS Terrain Tiles (formerly Mapzen Terrarium). Default attribution is automatically added to the map: `© Mapzen Elevation`. The elevation data comes from various sources including [SRTM, GMTED, NED and ETOPO1](https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
 
 ## Installation
 
@@ -341,6 +346,7 @@ Available via `L.GridLayer.Relief.elevationExtractors`:
 | `maxCacheSize` | `Number` | `50` | Maximum number of elevation tiles to cache |
 | `opacity` | `Number` | `1.0` | Layer opacity (0-1) |
 | `zIndex` | `Number` | `1` | Layer stacking order |
+| `attribution` | `String` | Mapzen Elevation | Attribution text for the elevation data source |
 
 **Note**: Slope color options are mutually exclusive (XOR): only one of `slopeColorScheme`, `slopeColorConfig`, or `slopeColorFunction` should be used.
 
