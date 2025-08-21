@@ -1,0 +1,58 @@
+# Dependabot configuration for automatic dependency updates
+version: 2
+updates:
+  # Enable version updates for npm
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 10
+    pull-request-branch-name:
+      separator: "/"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "npm"
+    assignees:
+      - "glandais"
+    reviewers:
+      - "glandais"
+    ignore:
+      # Ignore major version updates for these packages (if needed)
+      # - dependency-name: "leaflet"
+      #   versions: ["2.x", "3.x"]
+    groups:
+      # Group all development dependencies together
+      dev-dependencies:
+        patterns:
+          - "@semantic-release/*"
+          - "@commitlint/*"
+          - "semantic-release"
+          - "husky"
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    assignees:
+      - "glandais"
+    reviewers:
+      - "glandais"

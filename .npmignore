@@ -1,0 +1,32 @@
+# Development files
+.github/
+.husky/
+.releaserc.json
+commitlint.config.js
+CLAUDE.md
+
+# Example/demo files
+index.html
+*.example.*
+
+# Git and IDE
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Dependencies
+node_modules/
+
+# Build artifacts
+*.log
+.DS_Store
+Thumbs.db
+
+# Test files
+test/
+tests/
+*.test.js
+*.spec.js
