@@ -12,23 +12,66 @@
     <style>
         body {
             margin: 0;
-            padding: 20px;
+            padding: 10px;
             font-family: Arial, sans-serif;
+            box-sizing: border-box;
+        }
+        
+        * {
+            box-sizing: border-box;
         }
         
         #map {
-            height: 600px;
+            height: 70vh;
+            min-height: 400px;
+            max-height: 800px;
             width: 100%;
             border: 2px solid #ccc;
             border-radius: 8px;
         }
         
         .controls {
-            margin: 20px 0;
+            margin: 15px 0;
             display: flex;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
             flex-wrap: wrap;
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 8px;
+            }
+            
+            #map {
+                height: 60vh;
+                min-height: 350px;
+                border-radius: 4px;
+                border-width: 1px;
+            }
+            
+            .controls {
+                margin: 10px 0;
+                gap: 6px;
+                justify-content: center;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            body {
+                padding: 5px;
+            }
+            
+            #map {
+                height: 55vh;
+                min-height: 300px;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
         }
         
         .controls button {
@@ -40,6 +83,8 @@
             cursor: pointer;
             font-size: 14px;
             transition: background-color 0.3s;
+            min-width: 120px;
+            white-space: nowrap;
         }
         
         .controls button:hover {
@@ -58,29 +103,167 @@
         .opacity-control {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-left: 20px;
+            gap: 8px;
+            margin-left: 15px;
+            flex-wrap: wrap;
         }
         
         .opacity-control label {
             font-weight: bold;
+            font-size: 14px;
+            white-space: nowrap;
         }
         
         .opacity-control input[type="range"] {
-            width: 150px;
+            width: 120px;
+            min-width: 80px;
+        }
+        
+        .opacity-control select {
+            padding: 4px 8px;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            min-width: 100px;
+        }
+        
+        @media (max-width: 768px) {
+            .controls button {
+                padding: 8px 16px;
+                font-size: 13px;
+                min-width: 100px;
+            }
+            
+            .opacity-control {
+                margin-left: 0;
+                gap: 6px;
+            }
+            
+            .opacity-control input[type="range"] {
+                width: 100px;
+            }
+            
+            .opacity-control label {
+                font-size: 13px;
+            }
+            
+            .opacity-control select {
+                font-size: 13px;
+                min-width: 90px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .controls button {
+                padding: 10px 15px;
+                font-size: 14px;
+                min-width: auto;
+                width: 100%;
+            }
+            
+            .opacity-control {
+                width: 100%;
+                justify-content: space-between;
+                margin-left: 0;
+            }
+            
+            .opacity-control input[type="range"] {
+                flex-grow: 1;
+                max-width: 120px;
+            }
+            
+            .opacity-control select {
+                flex-grow: 1;
+                max-width: 150px;
+            }
         }
         
         .info {
             background: #f8f9fa;
             padding: 15px;
             border-radius: 5px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             border-left: 4px solid #007cad;
         }
         
         .info h2 {
             margin-top: 0;
             color: #007cad;
+            font-size: 1.4em;
+        }
+        
+        .info p {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .info ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .info li {
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+        
+        @media (max-width: 768px) {
+            .info {
+                padding: 12px;
+                margin-bottom: 12px;
+                border-radius: 4px;
+            }
+            
+            .info h2 {
+                font-size: 1.3em;
+            }
+            
+            .info ul {
+                padding-left: 18px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .info {
+                padding: 10px;
+                margin-bottom: 10px;
+            }
+            
+            .info h2 {
+                font-size: 1.2em;
+            }
+            
+            .info ul {
+                padding-left: 16px;
+            }
+            
+            .info li {
+                font-size: 14px;
+            }
+        }
+        
+        .location-select {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            min-width: 150px;
+            background: white;
+        }
+        
+        @media (max-width: 768px) {
+            .location-select {
+                font-size: 13px;
+                min-width: 130px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .location-select {
+                width: 100%;
+                min-width: auto;
+                margin-top: 8px;
+            }
         }
     </style>
 </head>
@@ -115,12 +298,12 @@
             <input type="range" id="azimuthSlider" min="0" max="360" value="315">
             <span id="azimuthValue">315°</span>
             
-            <label for="elevationSlider" style="margin-left: 20px;">Elevation:</label>
+            <label for="elevationSlider">Elevation:</label>
             <input type="range" id="elevationSlider" min="0" max="90" value="45">
             <span id="elevationValue">45°</span>
             
-            <label for="colorSchemeSelect" style="margin-left: 20px;">Color:</label>
-            <select id="colorSchemeSelect" style="padding: 4px; border-radius: 3px; border: 1px solid #ccc;">
+            <label for="colorSchemeSelect">Color:</label>
+            <select id="colorSchemeSelect">
                 <option value="grayscale">Grayscale</option>
                 <option value="sepia">Sepia</option>
                 <option value="blue">Blue Tinted</option>
@@ -130,8 +313,8 @@
         </div>
         
         <div class="opacity-control" id="slopeControls" style="display: none;">
-            <label for="slopeColorSelect" style="margin-left: 20px;">Color Scheme:</label>
-            <select id="slopeColorSelect" style="padding: 4px; border-radius: 3px; border: 1px solid #ccc;">
+            <label for="slopeColorSelect">Color Scheme:</label>
+            <select id="slopeColorSelect">
                 <option value="default">Default (Green→Red)</option>
                 <option value="glacial">Glacial (Blue→Red)</option>
                 <option value="thermal">Thermal (Purple→Yellow)</option>
@@ -366,9 +549,7 @@
         
         // Add location selector
         const locationSelect = document.createElement('select');
-        locationSelect.style.padding = '8px';
-        locationSelect.style.borderRadius = '5px';
-        locationSelect.style.border = '1px solid #ccc';
+        locationSelect.className = 'location-select';
         
         // Add default option
         const defaultOption = document.createElement('option');
