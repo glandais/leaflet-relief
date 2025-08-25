@@ -293,4 +293,328 @@ describe('L.GridLayer.Relief', () => {
       expect(tile).toBeDefined();
     });
   });
+
+  describe('Default Hillshade Color Function', () => {
+    test('should use default hillshade color function when not specified', () => {
+      const relief = L.gridLayer.relief({ mode: 'hillshade' });
+      expect(relief.hillshadeColorFunction).toBeDefined();
+      
+      // Test the default color function
+      const intensity = 0.5;
+      const color = relief.hillshadeColorFunction(intensity);
+      const expectedValue = Math.round(intensity * 255);
+      expect(color).toEqual([expectedValue, expectedValue, expectedValue]);
+    });
+
+    test('should handle different intensity values with default color function', () => {
+      const relief = L.gridLayer.relief({ mode: 'hillshade' });
+      
+      // Test various intensity values
+      const testValues = [0, 0.25, 0.5, 0.75, 1.0];
+      testValues.forEach(intensity => {
+        const color = relief.hillshadeColorFunction(intensity);
+        const expectedValue = Math.round(intensity * 255);
+        expect(color[0]).toBe(expectedValue);
+        expect(color[1]).toBe(expectedValue);
+        expect(color[2]).toBe(expectedValue);
+      });
+    });
+  });
+
+  describe('ElevationCache', () => {
+    test('should handle edge pixels that require neighboring tiles', () => {
+      const relief = L.gridLayer.relief();
+      // This is tested internally when createTile is called with edge pixels
+      const coords = { x: 10, y: 10, z: 12 };
+      const done = jest.fn();
+      
+      relief.addTo(map);
+      const tile = relief.createTile(coords, done);
+      
+      expect(tile).toBeDefined();
+      // Edge pixel calculations are handled internally by _ElevationCache
+    });
+  });
+
+  describe('Slope Color Functions', () => {
+    test('should handle slopes below minimum range', () => {
+      const colorConfig = [
+        { slope: { min: 10, max: 30 }, h: { min: 120, max: 60 } },
+        { slope: { min: 30, max: 50 }, h: { min: 60, max: 0 } }
+      ];
+      const relief = L.gridLayer.relief({
+        mode: 'slope',
+        slopeColorConfig: colorConfig
+      });
+      
+      // Test slope below minimum (should use first range's min hue)
+      const color = relief.slopeColorFunction(5); // Below min of 10
+      expect(color).toBeDefined();
+      expect(Array.isArray(color)).toBe(true);
+      expect(color.length).toBe(4);
+    });
+
+    test('should handle slopes above maximum range', () => {
+      const colorConfig = [
+        { slope: { min: 0, max: 20 }, h: { min: 120, max: 60 } },
+        { slope: { min: 20, max: 40 }, h: { min: 60, max: 0 } }
+      ];
+      const relief = L.gridLayer.relief({
+        mode: 'slope',
+        slopeColorConfig: colorConfig
+      });
+      
+      // Test slope above maximum (should use last range's max hue)
+      const color = relief.slopeColorFunction(60); // Above max of 40
+      expect(color).toBeDefined();
+      expect(Array.isArray(color)).toBe(true);
+      expect(color.length).toBe(4);
+    });
+
+    test('should handle glacial color scheme', () => {
+      const relief = L.gridLayer.relief({
+        mode: 'slope',
+        slopeColorScheme: 'glacial'
+      });
+      
+      // Test various slope values with glacial scheme
+      const testSlopes = [2, 10, 25, 45, 75];
+      testSlopes.forEach(slope => {
+        const color = relief.slopeColorFunction(slope);
+        expect(color).toBeDefined();
+        expect(Array.isArray(color)).toBe(true);
+        expect(color.length).toBe(4);
+        // Check RGB values are valid
+        expect(color[0]).toBeGreaterThanOrEqual(0);
+        expect(color[0]).toBeLessThanOrEqual(255);
+        expect(color[1]).toBeGreaterThanOrEqual(0);
+        expect(color[1]).toBeLessThanOrEqual(255);
+        expect(color[2]).toBeGreaterThanOrEqual(0);
+        expect(color[2]).toBeLessThanOrEqual(255);
+        expect(color[3]).toBe(255);
+      });
+    });
+
+    test('should handle thermal color scheme', () => {
+      const relief = L.gridLayer.relief({
+        mode: 'slope',
+        slopeColorScheme: 'thermal'
+      });
+      
+      // Test various slope values with thermal scheme
+      const testSlopes = [5, 17, 35, 55];
+      testSlopes.forEach(slope => {
+        const color = relief.slopeColorFunction(slope);
+        expect(color).toBeDefined();
+        expect(Array.isArray(color)).toBe(true);
+        expect(color.length).toBe(4);
+      });
+    });
+
+    test('should handle earth color scheme', () => {
+      const relief = L.gridLayer.relief({
+        mode: 'slope',
+        slopeColorScheme: 'earth'
+      });
+      
+      // Test various slope values with earth scheme
+      const testSlopes = [2.5, 10, 25, 45];
+      testSlopes.forEach(slope => {
+        const color = relief.slopeColorFunction(slope);
+        expect(color).toBeDefined();
+        expect(Array.isArray(color)).toBe(true);
+        expect(color.length).toBe(4);
+      });
+    });
+
+    test('should handle HSV to RGB conversion for different hue ranges', () => {
+      // Test all six hue ranges (0-60, 60-120, 120-180, 180-240, 240-300, 300-360)
+      const hueRanges = [
+        { slope: { min: 0, max: 10 }, h: { min: 30, max: 30 } },    // Red-orange range
+        { slope: { min: 10, max: 20 }, h: { min: 90, max: 90 } },   // Yellow-green range
+        { slope: { min: 20, max: 30 }, h: { min: 150, max: 150 } }, // Green-cyan range
+        { slope: { min: 30, max: 40 }, h: { min: 210, max: 210 } }, // Cyan-blue range
+        { slope: { min: 40, max: 50 }, h: { min: 270, max: 270 } }, // Blue-magenta range
+        { slope: { min: 50, max: 60 }, h: { min: 330, max: 330 } }  // Magenta-red range
+      ];
+      
+      const relief = L.gridLayer.relief({
+        mode: 'slope',
+        slopeColorConfig: hueRanges
+      });
+      
+      // Test each range
+      const testSlopes = [5, 15, 25, 35, 45, 55];
+      testSlopes.forEach(slope => {
+        const color = relief.slopeColorFunction(slope);
+        expect(color).toBeDefined();
+        expect(Array.isArray(color)).toBe(true);
+        expect(color.length).toBe(4);
+      });
+    });
+  });
+
+  describe('TileCache', () => {
+    test('should handle cache eviction when max size is reached', async () => {
+      const relief = L.gridLayer.relief({ maxCacheSize: 2 });
+      
+      // Mock fetch to return valid tile data
+      const mockTileData = new Uint8ClampedArray(256 * 256 * 4);
+      const mockBlob = new Blob([mockTileData.buffer], { type: 'image/png' });
+      
+      // Mock createImageBitmap
+      global.createImageBitmap = jest.fn(() => Promise.resolve({
+        width: 256,
+        height: 256
+      }));
+      
+      // Mock canvas context
+      const mockContext = {
+        drawImage: jest.fn(),
+        getImageData: jest.fn(() => ({
+          data: mockTileData
+        }))
+      };
+      
+      // Mock createElement to return a canvas with our mock context
+      const originalCreateElement = document.createElement;
+      document.createElement = jest.fn((tagName) => {
+        if (tagName === 'canvas') {
+          return {
+            width: 256,
+            height: 256,
+            getContext: jest.fn(() => mockContext)
+          };
+        }
+        return originalCreateElement.call(document, tagName);
+      });
+      
+      global.fetch.mockImplementation(() => 
+        Promise.resolve({
+          ok: true,
+          blob: () => Promise.resolve(mockBlob)
+        })
+      );
+      
+      // Access to internal tile cache
+      const cache = relief.tileCache;
+      expect(cache.maxCacheSize).toBe(2);
+      
+      // Get tiles to trigger caching
+      const abortController1 = new AbortController();
+      const abortController2 = new AbortController();
+      const abortController3 = new AbortController();
+      
+      await cache.getTile(10, 100, 100, abortController1.signal);
+      await cache.getTile(10, 101, 100, abortController2.signal);
+      await cache.getTile(10, 102, 100, abortController3.signal);
+      
+      // Cache should not exceed max size (should evict the oldest)
+      const cacheKeys = Array.from(cache.tileCache.keys());
+      expect(cacheKeys.length).toBeLessThanOrEqual(2);
+      
+      // Restore original createElement
+      document.createElement = originalCreateElement;
+    });
+
+    test('should handle elevation URL as string or function', () => {
+      // Test with URL template string
+      const urlTemplate = 'https://example.com/{z}/{x}/{y}.png';
+      const relief1 = L.gridLayer.relief({ elevationUrl: urlTemplate });
+      
+      // URL string should be stored as is
+      expect(typeof relief1.tileCache.elevationUrl).toBe('string');
+      expect(relief1.tileCache.elevationUrl).toBe(urlTemplate);
+      
+      // Test with URL function
+      const urlFunction = (z, x, y) => `https://example.com/${z}/${x}/${y}.png`;
+      const relief2 = L.gridLayer.relief({ elevationUrl: urlFunction });
+      
+      // URL function should be stored as function
+      expect(typeof relief2.tileCache.elevationUrl).toBe('function');
+      const url = relief2.tileCache.elevationUrl(10, 100, 200);
+      expect(url).toBe('https://example.com/10/100/200.png');
+    });
+
+    test('should handle abort errors during tile fetch', async () => {
+      const relief = L.gridLayer.relief();
+      relief.addTo(map);
+      
+      const coords = { x: 0, y: 0, z: 10 };
+      const done = jest.fn();
+      
+      const tile = relief.createTile(coords, done);
+      
+      // Simulate abort immediately
+      if (tile._abortController) {
+        tile._abortController.abort();
+      }
+      
+      // Wait for async operations
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Should handle abort without throwing unhandled errors
+      expect(tile).toBeDefined();
+    });
+  });
+
+  describe('Single Tile Mode', () => {
+    test('should handle single tile mode for hillshade', () => {
+      const relief = L.gridLayer.relief({
+        mode: 'hillshade',
+        singleTileMode: true
+      });
+      
+      expect(relief.singleTileMode).toBe(true);
+      relief.addTo(map);
+      
+      const coords = { x: 10, y: 10, z: 12 };
+      const done = jest.fn();
+      
+      const tile = relief.createTile(coords, done);
+      expect(tile).toBeDefined();
+    });
+
+    test('should handle single tile mode for slope', () => {
+      const relief = L.gridLayer.relief({
+        mode: 'slope',
+        singleTileMode: true
+      });
+      
+      expect(relief.singleTileMode).toBe(true);
+      relief.addTo(map);
+      
+      const coords = { x: 10, y: 10, z: 12 };
+      const done = jest.fn();
+      
+      const tile = relief.createTile(coords, done);
+      expect(tile).toBeDefined();
+    });
+  });
+
+  describe('Coordinate and Pixel Calculations', () => {
+    test('should handle latitude calculations for tiles', () => {
+      const relief = L.gridLayer.relief({ mode: 'slope' });
+      relief.addTo(map);
+      
+      // This triggers internal latitude calculations
+      const coords = { x: 10, y: 10, z: 5 };
+      const done = jest.fn();
+      
+      const tile = relief.createTile(coords, done);
+      expect(tile).toBeDefined();
+    });
+
+    test('should handle extreme latitude values', () => {
+      const relief = L.gridLayer.relief({ mode: 'slope' });
+      relief.addTo(map);
+      
+      // Test near poles (extreme latitude)
+      const coords = { x: 0, y: 0, z: 5 }; // Near north pole
+      const done = jest.fn();
+      
+      const tile = relief.createTile(coords, done);
+      expect(tile).toBeDefined();
+    });
+  });
 });

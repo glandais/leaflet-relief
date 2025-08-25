@@ -43,6 +43,7 @@ desktop.ini
 # Testing
 coverage/
 .nyc_output/
+.playwright-mcp
 
 # Temporary files
 tmp/

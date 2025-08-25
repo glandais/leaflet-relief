@@ -119,6 +119,11 @@
             min-width: 80px;
         }
         
+        .opacity-control input[type="checkbox"] {
+            margin: 0 8px;
+            transform: scale(1.2);
+        }
+        
         .opacity-control select {
             padding: 4px 8px;
             border-radius: 3px;
@@ -321,6 +326,12 @@
                 <option value="earth">Earth (Green→Brown)</option>
             </select>
         </div>
+        
+        <div class="opacity-control">
+            <label for="singleTileModeToggle">Performance:</label>
+            <input type="checkbox" id="singleTileModeToggle" checked>
+            <span id="singleTileModeLabel">Single-tile (Fast)</span>
+        </div>
     </div>
     
     <div id="map"></div>
@@ -385,7 +396,8 @@
             elevation: 45,
             hillshadeColorFunction: colorSchemes.grayscale,
             opacity: 0.6,
-            zIndex: 100
+            zIndex: 100,
+            singleTileMode: true
         });
         reliefLayer.addTo(map);
         
@@ -403,6 +415,8 @@
         const slopeColorSelect = document.getElementById('slopeColorSelect');
         const hillshadeControls = document.getElementById('hillshadeControls');
         const slopeControls = document.getElementById('slopeControls');
+        const singleTileModeToggle = document.getElementById('singleTileModeToggle');
+        const singleTileModeLabel = document.getElementById('singleTileModeLabel');
         
         let reliefVisible = true;
         
@@ -417,7 +431,8 @@
                     elevation: parseInt(elevationSlider.value),
                     hillshadeColorFunction: colorSchemes[colorSchemeSelect.value],
                     opacity: opacitySlider.value / 100,
-                    zIndex: 100
+                    zIndex: 100,
+                    singleTileMode: singleTileModeToggle.checked
                 });
                 reliefLayer.addTo(map);
             } else {
@@ -447,7 +462,8 @@
                     mode: 'slope',
                     slopeColorScheme: slopeColorSelect.value,
                     opacity: opacitySlider.value / 100,
-                    zIndex: 100
+                    zIndex: 100,
+                    singleTileMode: singleTileModeToggle.checked
                 });
                 reliefLayer.addTo(map);
             } else {
@@ -518,7 +534,8 @@
                     elevation: parseInt(elevationSlider.value),
                     hillshadeColorFunction: colorSchemes[e.target.value],
                     opacity: opacitySlider.value / 100,
-                    zIndex: 100
+                    zIndex: 100,
+                    singleTileMode: singleTileModeToggle.checked
                 });
                 reliefLayer.addTo(map);
             }
@@ -533,8 +550,42 @@
                     mode: 'slope',
                     slopeColorScheme: e.target.value,
                     opacity: opacitySlider.value / 100,
-                    zIndex: 100
+                    zIndex: 100,
+                    singleTileMode: singleTileModeToggle.checked
                 });
+                reliefLayer.addTo(map);
+            }
+        });
+        
+        // Single-tile mode toggle control
+        singleTileModeToggle.addEventListener('change', (e) => {
+            const useSingleTile = e.target.checked;
+            singleTileModeLabel.textContent = useSingleTile ? 'Single-tile (Fast)' : 'Multi-tile (Accurate)';
+            
+            if (reliefVisible) {
+                // Recreate layer with new tile mode
+                const currentMode = reliefLayer.mode;
+                map.removeLayer(reliefLayer);
+                
+                if (currentMode === 'hillshade') {
+                    reliefLayer = L.gridLayer.relief({
+                        mode: 'hillshade',
+                        azimuth: parseInt(azimuthSlider.value),
+                        elevation: parseInt(elevationSlider.value),
+                        hillshadeColorFunction: colorSchemes[colorSchemeSelect.value],
+                        opacity: opacitySlider.value / 100,
+                        zIndex: 100,
+                        singleTileMode: useSingleTile
+                    });
+                } else {
+                    reliefLayer = L.gridLayer.relief({
+                        mode: 'slope',
+                        slopeColorScheme: slopeColorSelect.value,
+                        opacity: opacitySlider.value / 100,
+                        zIndex: 100,
+                        singleTileMode: useSingleTile
+                    });
+                }
                 reliefLayer.addTo(map);
             }
         });
