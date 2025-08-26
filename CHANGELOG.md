@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/glandais/leaflet-relief/compare/v1.3.0...v1.4.0) (2025-08-26)
+
+
+### Features
+
+* e2e tests ([8b743f3](https://github.com/glandais/leaflet-relief/commit/8b743f3efd0b97a9c916051efe96c0e823ab287b))
+
 # [1.3.0](https://github.com/glandais/leaflet-relief/compare/v1.2.0...v1.3.0) (2025-08-26)
 
 
