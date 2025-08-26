@@ -15,7 +15,64 @@
 
 // ====================== INTERNAL ELEVATION MANAGEMENT ======================
 
-const _OUTSIDE_TILE = 50000;
+const _EARTH_CIRCUMFERENCE = 40075017;
+const TILE_SIZE = 256;
+
+// ====================== CANVAS POOL MANAGEMENT ======================
+
+/**
+ * Internal canvas pool for DEM tile fetching
+ * Grows unbounded during usage, trims to idle size after timeout
+ */
+const _canvasPool = {
+    available: [],
+    idleSize: 5,
+    idleTimeout: 30000, // 30 seconds
+    idleTimer: null,
+    
+    acquire() {
+        let canvas = this.available.pop();
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.width = TILE_SIZE;
+            canvas.height = TILE_SIZE;
+        }
+        this._resetIdleTimer();
+        return canvas;
+    },
+    
+    release(canvas) {
+        if (canvas) {
+            this.available.push(canvas);
+            this._resetIdleTimer();
+        }
+    },
+    
+    _resetIdleTimer() {
+        if (this.idleTimer) {
+            clearTimeout(this.idleTimer);
+        }
+        this.idleTimer = setTimeout(() => this._trim(), this.idleTimeout);
+    },
+    
+    _trim() {
+        // Trim pool to idle size
+        while (this.available.length > this.idleSize) {
+            this.available.pop();
+        }
+    }
+};
+
+/**
+ * Default elevation tile URL pattern (AWS Terrarium)
+ * @param {number} z - Zoom level
+ * @param {number} x - Tile X coordinate
+ * @param {number} y - Tile Y coordinate
+ * @returns {string} Tile URL
+ */
+const _defaultElevationUrl = function(z, x, y) {
+    return `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+};
 
 /**
  * Default Terrarium elevation extraction function
@@ -42,17 +99,6 @@ const _mapboxElevationExtractor = function(r, g, b, a) {
 };
 
 /**
- * Default elevation tile URL pattern (AWS Terrarium)
- * @param {number} z - Zoom level
- * @param {number} x - Tile X coordinate
- * @param {number} y - Tile Y coordinate
- * @returns {string} Tile URL
- */
-const _defaultElevationUrl = function(z, x, y) {
-    return `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
-};
-
-/**
  * Default hillshade color function (grayscale)
  * @param {number} intensity - Light intensity (0-1)
  * @returns {Array} RGB values [r, g, b]
@@ -62,181 +108,13 @@ const _defaultHillshadeColorFunction = function(intensity) {
     return [value, value, value];
 };
 
-/**
- * Extract elevation from RGBA pixel data
- * @param {Uint8ClampedArray} tileData - Tile pixel data
- * @param {number} i - Pixel row
- * @param {number} j - Pixel column
- * @param {Function} elevationExtractor - Extraction function
- * @returns {number} Elevation in meters
- */
-const _extractElevation = function(tileData, i, j, elevationExtractor) {
-    const pixelIndex = (i * 256 + j) * 4;
-    const r = tileData[pixelIndex];
-    const g = tileData[pixelIndex + 1];
-    const b = tileData[pixelIndex + 2];
-    const a = tileData[pixelIndex + 3];
-    return elevationExtractor(r, g, b, a);
-};
-
-/**
- * _TileCache - Manages elevation data fetching and caching
- *
- * This class handles fetching elevation tiles from configurable sources,
- * with support for custom URL patterns and elevation extraction functions.
- */
-class _TileCache {
-    constructor(options = {}) {
-        this.tileCache = new Map();
-        this.accessOrder = [];
-        this.maxCacheSize = options.maxCacheSize || 50;
-        this.elevationUrl = options.elevationUrl || _defaultElevationUrl;
-        this.elevationExtractor = options.elevationExtractor || _defaultElevationExtractor;
-        this.pendingRequests = new Map();
-    }
-
-    async getTile(z, x, y, abortSignal) {
-        const tileKey = `${z}/${x}/${y}`;
-        
-        if (this.tileCache.has(tileKey)) {
-            return this.tileCache.get(tileKey);
-        }
-
-        if (this.pendingRequests.has(tileKey)) {
-            return this.pendingRequests.get(tileKey);
-        }
-
-        try {
-            const fetchPromise = this.fetchTile(z, x, y, abortSignal);
-            this.pendingRequests.set(tileKey, fetchPromise);
-            const tileData = await fetchPromise;
-            this.addToCache(tileKey, tileData);
-            return tileData;
-        } finally {
-            this.pendingRequests.delete(tileKey);
-        }
-    }
-
-    async fetchTile(z, x, y, abortSignal) {
-        const url = typeof this.elevationUrl === 'function' 
-            ? this.elevationUrl(z, x, y)
-            : this.elevationUrl.replace('{z}', z).replace('{x}', x).replace('{y}', y);
-        
-        try {
-            const response = await fetch(url, { signal: abortSignal });
-            if (!response.ok) {
-                throw new Error(`Failed to fetch tile: ${response.status}`);
-            }
-            
-            const blob = await response.blob();
-            const bitmap = await createImageBitmap(blob);
-            
-            const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 256;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(bitmap, 0, 0);
-            
-            const imageData = ctx.getImageData(0, 0, 256, 256);
-            return imageData.data;
-        } catch (error) {
-            if (error.name !== 'AbortError') {
-                console.error(`Error fetching tile ${z}/${x}/${y}:`, error);
-            }
-            throw error;
-        }
-    }
-
-    addToCache(tileKey, tileData) {
-        while (this.tileCache.size >= this.maxCacheSize && this.accessOrder.length > 0) {
-            const oldestKey = this.accessOrder.shift();
-            this.tileCache.delete(oldestKey);
-        }
-        
-        this.tileCache.set(tileKey, tileData);
-        this.accessOrder.push(tileKey);
-    }
-
-}
-
-// We'll create the tile cache per layer instance instead of singleton
-// to support different elevation sources per layer
-
-/**
- * _ElevationCache - Local cache for a 3x3 grid of elevation tiles
- */
-class _ElevationCache {
-    constructor(tileCache) {
-        this.tiles = new Map();
-        this.tileCache = tileCache;
-    }
-
-    async init(z, x, y, abortSignal) {
-        for (let dx = -1; dx < 2; dx++) {
-            for (let dy = -1; dy < 2; dy++) {
-                let rx = x + dx;
-                let ry = y + dy;
-                const tileKey = `${z}/${rx}/${ry}`;
-                this.tiles.set(tileKey, await this.tileCache.getTile(z, rx, ry, abortSignal));
-            }
-        }
-    }
-
-    getElevation(z, x, y, i, j) {
-        let tileX = x;
-        let tileY = y;
-        let pixelI = j;
-        let pixelJ = i;
-
-        while (pixelI < 0) {
-            tileY--;
-            pixelI += 256;
-        }
-        while (pixelI > 255) {
-            tileY++;
-            pixelI -= 256;
-        }
-        while (pixelJ < 0) {
-            tileX--;
-            pixelJ += 256;
-        }
-        while (pixelJ > 255) {
-            tileX++;
-            pixelJ -= 256;
-        }
-
-        const tileKey = `${z}/${tileX}/${tileY}`;
-        const tileData = this.tiles.get(tileKey);
-        return _extractElevation(tileData, pixelI, pixelJ, this.tileCache.elevationExtractor);
-    }
-}
-
-// ====================== INTERNAL HILLSHADE FUNCTIONS ======================
-
-
-const _getZ = function(getElevation, i, j) {
-    if (i <= 0 || j <= 0 || i >= 255 || j >= 255)
-        return _getZ(getElevation, Math.max(1, Math.min(i, 254)), Math.max(1, Math.min(j, 254)))
-    return [
-        getElevation(i - 1, j - 1),
-        getElevation(i - 1, j),
-        getElevation(i - 1, j + 1),
-        getElevation(i, j - 1),
-        getElevation(i, j),
-        getElevation(i, j + 1),
-        getElevation(i + 1, j - 1),
-        getElevation(i + 1, j),
-        getElevation(i + 1, j + 1)
-    ];
-}
-
 const _getDzdx = function(z, divider) {
     return ((z[2] + 2 * z[5] + z[8]) - (z[0] + 2 * z[3] + z[6])) / (8 * divider);
-}
+};
 
 const _getDzdy = function(z, divider) {
     return ((z[0] + 2 * z[1] + z[2]) - (z[6] + 2 * z[7] + z[8])) / (8 * divider);
-}
+};
 
 const _getL = function(z, a1, a2, a3) {
     let dzdx = _getDzdx(z, 5);
@@ -245,81 +123,22 @@ const _getL = function(z, a1, a2, a3) {
     if (L < 0) L = 0;
     L = Math.sqrt(L * .8 + .2);
     return L;
-}
-
-/**
- * fillHillshadeTile - Renders hillshade effect for a single map tile
- * @param {Uint8ClampedArray} data - Canvas image data  
- * @param {Object} coords - Tile coordinates {x, y, z}
- * @param {AbortSignal} abortSignal - Abort controller signal
- * @param {Object} layer - Layer instance
- * @param {boolean} singleTileMode - Whether to use single-tile optimization
- */
-const _fillHillshadeTile = async (data, coords, abortSignal, layer, singleTileMode = false) => {
-    const x = coords.x;
-    const y = coords.y;
-    const z = coords.z;
-
-    // Use configurable azimuth and elevation from layer options
-    const azimuth = layer.azimuth;
-    const elevation = layer.elevation;
-    const alpha = Math.PI / 180 * azimuth;
-    const beta = Math.PI / 180 * elevation;
-    const a1 = Math.sin(beta);
-    const a2 = Math.cos(beta) * Math.sin(alpha);
-    const a3 = Math.cos(beta) * Math.cos(alpha);
-
-    // Setup elevation data based on mode
-    let elevationCache, tileData;
-    if (singleTileMode) {
-        tileData = await layer.tileCache.getTile(z, x, y, abortSignal);
-    } else {
-        elevationCache = new _ElevationCache(layer.tileCache);
-        await elevationCache.init(z, x, y, abortSignal);
-    }
-
-    // Helper function to get elevation based on mode
-    const getElevation = (i, j) => {
-        if (singleTileMode) {
-            return _getElevationSingleTile(tileData, j, i, 256, 256, layer.tileCache.elevationExtractor);
-        } else {
-            return elevationCache.getElevation(z, x, y, i, j);
-        }
-    };
-
-    // Main rendering loop
-    for (let i = 0; i < 256; i++) {
-        if (abortSignal && abortSignal.aborted) {
-            throw new DOMException('Tile loading aborted', 'AbortError');
-        }
-
-        for (let j = 0; j < 256; j++) {
-            // Get 3x3 elevation grid using Horn's method
-            const z = _getZ(getElevation, i, j)
-
-            const hasNoData = z.some(v => v <= 0);
-
-            const rgba = [0, 0, 0, 255];
-            if (!hasNoData) {
-                var L = _getL(z, a1, a2, a3);
-                const [colorR, colorG, colorB] = layer.hillshadeColorFunction(L);
-                rgba[0] = colorR;
-                rgba[1] = colorG;
-                rgba[2] = colorB;
-                rgba[3] = 255;
-            } else {
-                rgba[3] = 0;
-            }
-
-            const pixelIndex = (j * 256 + i) * 4;
-            data[pixelIndex] = rgba[0];
-            data[pixelIndex + 1] = rgba[1];
-            data[pixelIndex + 2] = rgba[2];
-            data[pixelIndex + 3] = rgba[3];
-        }
-    }
 };
 
+const _pixelSizeMeters = function(y, z) {
+    const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z);
+    const latitude = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+    const metersPerPixelEquator = _EARTH_CIRCUMFERENCE / (TILE_SIZE * Math.pow(2, z));
+    const clampedLatitude = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, latitude));
+    return Math.max(0.1, metersPerPixelEquator * Math.cos(clampedLatitude));
+};
+
+const _getSlope = function(z, pixelSizeMeters) {
+    const dzdx = _getDzdx(z, pixelSizeMeters);
+    const dzdy = _getDzdy(z, pixelSizeMeters);
+    const slopeDegrees = Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy)) * 180 / Math.PI;
+    return slopeDegrees;
+};
 
 // ====================== INTERNAL SLOPE FUNCTIONS ======================
 
@@ -421,116 +240,6 @@ const _createSlopeColorFunction = function(colorConfig) {
     };
 };
 
-/**
- * Convert tile Y coordinate to latitude
- */
-const _tileToLat = (y, z) => {
-    const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z);
-    return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-};
-
-const _EARTH_CIRCUMFERENCE = 40075017;
-
-/**
- * Get elevation from single tile with edge pixel replication
- * @param {Uint8ClampedArray} tileData - Single tile pixel data
- * @param {number} x - Pixel X coordinate
- * @param {number} y - Pixel Y coordinate
- * @param {number} width - Tile width (256)
- * @param {number} height - Tile height (256)
- * @param {Function} elevationExtractor - Extraction function
- * @returns {number} Elevation in meters
- */
-const _getElevationSingleTile = function(tileData, x, y, width, height, elevationExtractor) {
-    if (x < 0 || y < 0 || x >= width || y >= height) {
-        return _OUTSIDE_TILE;
-    }
-    return _extractElevation(tileData, x, y, elevationExtractor);
-};
-
-const _getSlope = function(z, pixelSizeMeters) {
-    const dzdx = _getDzdx(z, pixelSizeMeters);
-    const dzdy = _getDzdy(z, pixelSizeMeters);
-    const slopeDegrees = Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy)) * 180 / Math.PI;
-    return slopeDegrees;
-}
-
-/**
- * fillSlopeTile - Renders slope visualization for a single map tile
- * @param {Uint8ClampedArray} data - Canvas image data
- * @param {Object} coords - Tile coordinates {x, y, z}
- * @param {AbortSignal} abortSignal - Abort controller signal
- * @param {Object} layer - Layer instance
- * @param {boolean} singleTileMode - Whether to use single-tile optimization
- */
-const _fillSlopeTile = async (data, coords, abortSignal, layer, singleTileMode = false) => {
-    const x = coords.x;
-    const y = coords.y;
-    const z = coords.z;
-
-    // Common calculations
-    const latitude = _tileToLat(y + 0.5, z);
-    const metersPerPixelEquator = _EARTH_CIRCUMFERENCE / (256 * Math.pow(2, z));
-    const clampedLatitude = Math.max(-89.9, Math.min(89.9, latitude));
-    const pixelSizeMeters = Math.max(0.1, metersPerPixelEquator * Math.cos(clampedLatitude * Math.PI / 180));
-
-    // Setup elevation data based on mode
-    let elevationCache, tileData;
-    if (singleTileMode) {
-        tileData = await layer.tileCache.getTile(z, x, y, abortSignal);
-    } else {
-        elevationCache = new _ElevationCache(layer.tileCache);
-        await elevationCache.init(z, x, y, abortSignal);
-    }
-
-    // Helper function to get elevation based on mode
-    const getElevation = (i, j) => {
-        if (singleTileMode) {
-            return _getElevationSingleTile(tileData, j, i, 256, 256, layer.tileCache.elevationExtractor);
-        } else {
-            return elevationCache.getElevation(z, x, y, i, j);
-        }
-    };
-
-    // Main rendering loop
-    for (let i = 0; i < 256; i++) {
-        if (abortSignal && abortSignal.aborted) {
-            throw new DOMException('Tile loading aborted', 'AbortError');
-        }
-
-        for (let j = 0; j < 256; j++) {
-            // Get 3x3 elevation grid using Horn's method
-            const z = _getZ(getElevation, i, j)
-
-            const hasNoData = z.some(v => v <= 0);
-
-            const rgba = [0, 0, 0, 255];
-            if (!hasNoData) {
-                const slopeDegrees = _getSlope(z, pixelSizeMeters);
-
-                if (slopeDegrees < 0.5) {
-                    rgba[3] = 0;
-                } else {
-                    const slopeColor = layer.slopeColorFunction(slopeDegrees);
-                    rgba[0] = slopeColor[0];
-                    rgba[1] = slopeColor[1];
-                    rgba[2] = slopeColor[2];
-                    rgba[3] = 255;
-                }
-            } else {
-                rgba[3] = 0;
-            }
-
-            const pixelIndex = (j * 256 + i) * 4;
-            data[pixelIndex] = rgba[0];
-            data[pixelIndex + 1] = rgba[1];
-            data[pixelIndex + 2] = rgba[2];
-            data[pixelIndex + 3] = rgba[3];
-        }
-    }
-};
-
-
 // ====================== MAIN PLUGIN CLASS ======================
 L.GridLayer.Relief = L.GridLayer.extend({
 
@@ -549,12 +258,10 @@ L.GridLayer.Relief = L.GridLayer.extend({
         // Select rendering mode: 'hillshade' or 'slope'
         this.mode = (options && options.mode) || 'hillshade';
 
-        // Enable single-tile optimization mode (default: true)
-        this.singleTileMode = (options && typeof options.singleTileMode === 'boolean') ? options.singleTileMode : true;
-
         // Configure hillshade parameters (only used in hillshade mode)
         this.azimuth = (options && typeof options.azimuth === 'number') ? options.azimuth : 315;
         this.elevation = (options && typeof options.elevation === 'number') ? options.elevation : 45;
+        this._recomputeHillshadeConstants();
         this.hillshadeColorFunction = (options && options.hillshadeColorFunction) || _defaultHillshadeColorFunction;
 
         // Configure slope color function (only used in slope mode) - XOR priority
@@ -569,21 +276,14 @@ L.GridLayer.Relief = L.GridLayer.extend({
             this.slopeColorFunction = _createSlopeColorFunction(_defaultSlopeColorConfig);
         }
 
-        // Create tile cache with custom options
-        this.tileCache = new _TileCache({
-            maxCacheSize: (options && options.maxCacheSize) || 50,
-            elevationUrl: (options && options.elevationUrl) || _defaultElevationUrl,
-            elevationExtractor: (options && options.elevationExtractor) || _defaultElevationExtractor
-        });
+        this.elevationUrl = (options && options.elevationUrl) || _defaultElevationUrl,
+        this.elevationExtractor = (options && options.elevationExtractor) || _defaultElevationExtractor
 
         // Assign the appropriate rendering function based on mode
-        // These functions now accept singleTileMode parameter directly
         if (this.mode === 'hillshade') {
-            this.fillTile = (data, coords, abortSignal, layer) => 
-                _fillHillshadeTile(data, coords, abortSignal, layer, this.singleTileMode);
+            this.fillTile = this._fillHillshadeTile.bind(this);
         } else {
-            this.fillTile = (data, coords, abortSignal, layer) => 
-                _fillSlopeTile(data, coords, abortSignal, layer, this.singleTileMode);
+            this.fillTile = this._fillSlopeTile.bind(this);
         }
 
         // Track abort controllers for cancelling in-flight tile requests
@@ -594,6 +294,148 @@ L.GridLayer.Relief = L.GridLayer.extend({
         this.on('tileunload', function(e) {
             this.tileUnloaded(e.coords);
         });
+    },
+
+    _recomputeHillshadeConstants() {
+        const alpha = Math.PI / 180 * this.azimuth;
+        const beta = Math.PI / 180 * this.elevation;
+        this._hillshadeA1 = Math.sin(beta);
+        this._hillshadeA2 = Math.cos(beta) * Math.sin(alpha);
+        this._hillshadeA3 = Math.cos(beta) * Math.cos(alpha);
+    },
+
+    /**
+     * Extract elevation from RGBA pixel data
+     * @param {Uint8ClampedArray} tileData - Tile pixel data
+     * @param {number} i - Pixel row
+     * @param {number} j - Pixel column
+     * @param {Function} elevationExtractor - Extraction function
+     * @returns {number} Elevation in meters
+     */
+    _getElevation: function(tileData, j, i) {
+        const pixelIndex = (i * TILE_SIZE + j) * 4;
+        const r = tileData[pixelIndex];
+        const g = tileData[pixelIndex + 1];
+        const b = tileData[pixelIndex + 2];
+        const a = tileData[pixelIndex + 3];
+        return this.elevationExtractor(r, g, b, a);
+    },
+
+
+    _getZ: function(tileData, i, j) {
+        // Clamp coordinates to valid tile boundaries (1-254) to avoid edge pixels
+        if (i <= 0 || j <= 0 || i >= (TILE_SIZE - 1) || j >= (TILE_SIZE - 1)) {
+            const clampedI = Math.max(1, Math.min(i, TILE_SIZE - 2));
+            const clampedJ = Math.max(1, Math.min(j, TILE_SIZE - 2));
+            return this._getZ(tileData, clampedI, clampedJ);
+        }
+        
+        // Return 3x3 elevation grid using Horn's method for gradient calculation
+        return [
+            this._getElevation(tileData, i - 1, j - 1),
+            this._getElevation(tileData, i - 1, j),
+            this._getElevation(tileData, i - 1, j + 1),
+            this._getElevation(tileData, i, j - 1),
+            this._getElevation(tileData, i, j),
+            this._getElevation(tileData, i, j + 1),
+            this._getElevation(tileData, i + 1, j - 1),
+            this._getElevation(tileData, i + 1, j),
+            this._getElevation(tileData, i + 1, j + 1)
+        ];
+    },
+
+    /**
+     * fillHillshadeTile - Renders hillshade effect for a single map tile
+     * @param {Uint8ClampedArray} data - Canvas image data  
+     * @param {Object} coords - Tile coordinates {x, y, z}
+     * @param {AbortSignal} abortSignal - Abort controller signal
+     */
+    _fillHillshadeTile: async function (data, tileData, coords, abortSignal) {
+        const x = coords.x;
+        const y = coords.y;
+        const z = coords.z;
+
+        // Main rendering loop
+        for (let i = 0; i < TILE_SIZE; i++) {
+            if (abortSignal && abortSignal.aborted) {
+                throw new DOMException('Tile loading aborted', 'AbortError');
+            }
+
+            for (let j = 0; j < TILE_SIZE; j++) {
+                // Get 3x3 elevation grid using Horn's method
+                const z = this._getZ(tileData, i, j)
+
+                const hasNoData = z.some(v => v <= 0);
+
+                const rgba = [0, 0, 0, 255];
+                if (!hasNoData) {
+                    var L = _getL(z, this._hillshadeA1, this._hillshadeA2, this._hillshadeA3);
+                    const [colorR, colorG, colorB] = this.hillshadeColorFunction(L);
+                    rgba[0] = colorR;
+                    rgba[1] = colorG;
+                    rgba[2] = colorB;
+                    rgba[3] = 255;
+                } else {
+                    rgba[3] = 0;
+                }
+
+                const pixelIndex = (j * TILE_SIZE + i) * 4;
+                data[pixelIndex] = rgba[0];
+                data[pixelIndex + 1] = rgba[1];
+                data[pixelIndex + 2] = rgba[2];
+                data[pixelIndex + 3] = rgba[3];
+            }
+        }
+    },
+
+    /**
+     * fillSlopeTile - Renders slope visualization for a single map tile
+     * @param {Uint8ClampedArray} data - Canvas image data
+     * @param {Object} coords - Tile coordinates {x, y, z}
+     * @param {AbortSignal} abortSignal - Abort controller signal
+     */
+    _fillSlopeTile: async function (data, tileData, coords, abortSignal) {
+        const x = coords.x;
+        const y = coords.y;
+        const z = coords.z;
+
+        const pixelSizeMeters = _pixelSizeMeters(y, z);
+
+        // Main rendering loop
+        for (let i = 0; i < TILE_SIZE; i++) {
+            if (abortSignal && abortSignal.aborted) {
+                throw new DOMException('Tile loading aborted', 'AbortError');
+            }
+
+            for (let j = 0; j < TILE_SIZE; j++) {
+                const z = this._getZ(tileData, i, j)
+
+                const hasNoData = z.some(v => v <= 0);
+
+                const rgba = [0, 0, 0, 255];
+                if (!hasNoData) {
+                    const slopeDegrees = _getSlope(z, pixelSizeMeters);
+
+                    if (slopeDegrees < 0.5) {
+                        rgba[3] = 0;
+                    } else {
+                        const slopeColor = this.slopeColorFunction(slopeDegrees);
+                        rgba[0] = slopeColor[0];
+                        rgba[1] = slopeColor[1];
+                        rgba[2] = slopeColor[2];
+                        rgba[3] = 255;
+                    }
+                } else {
+                    rgba[3] = 0;
+                }
+
+                const pixelIndex = (j * TILE_SIZE + i) * 4;
+                data[pixelIndex] = rgba[0];
+                data[pixelIndex + 1] = rgba[1];
+                data[pixelIndex + 2] = rgba[2];
+                data[pixelIndex + 3] = rgba[3];
+            }
+        }
     },
 
     /**
@@ -617,12 +459,15 @@ L.GridLayer.Relief = L.GridLayer.extend({
      * @returns {HTMLCanvasElement} The canvas element for this tile
      */
     createTile: function(coords, done) {
-        const tileKey = `${coords.z}/${coords.x}/${coords.y}`;
+        const x = coords.x;
+        const y = coords.y;
+        const z = coords.z;
+        const tileKey = `${z}/${x}/${y}`;
 
-        // Create a 256x256 canvas for this tile
+        // Create a canvas for this tile
         var tile = document.createElement('canvas');
-        tile.setAttribute('width', 256);
-        tile.setAttribute('height', 256);
+        tile.setAttribute('width', TILE_SIZE);
+        tile.setAttribute('height', TILE_SIZE);
 
         var ctx = tile.getContext('2d');
 
@@ -634,12 +479,38 @@ L.GridLayer.Relief = L.GridLayer.extend({
         const abortController = new AbortController();
         this.abortControllers.set(tileKey, abortController);
 
+        const url = typeof this.elevationUrl === 'function' 
+            ? this.elevationUrl(z, x, y)
+            : this.elevationUrl.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+
         // Asynchronously fill the tile with terrain visualization
         (async () => {
+            // Declare variables outside try block for cleanup in finally
+            let demBitmap = null;
+            let demCanvas = null;
+            let demCtx = null;
+            
             try {
+                // Acquire canvas from pool
+                demCanvas = _canvasPool.acquire();
+                demCtx = demCanvas.getContext('2d', { willReadFrequently: true });
+                
+                const demResponse = await fetch(url, { signal: abortController.signal });
+                if (!demResponse.ok) {
+                    throw new Error(`Failed to fetch tile: ${demResponse.status}`);
+                }
+                
+                const demBlob = await demResponse.blob();
+                demBitmap = await createImageBitmap(demBlob);
+                
+                demCtx.drawImage(demBitmap, 0, 0);
+                
+                const demImageData = demCtx.getImageData(0, 0, TILE_SIZE, TILE_SIZE);
+                const demTileData = demImageData.data;
+
                 // Call the mode-specific rendering function (hillshade or slope)
                 // This will fetch elevation data and calculate colors for each pixel
-                await this.fillTile(imageData.data, coords, abortController.signal, this);
+                await this.fillTile(imageData.data, demTileData, coords, abortController.signal);
 
                 // Only render if the request wasn't aborted
                 if (!abortController.signal.aborted) {
@@ -656,6 +527,16 @@ L.GridLayer.Relief = L.GridLayer.extend({
             } finally {
                 // Clean up the abort controller
                 this.abortControllers.delete(tileKey);
+                
+                // Free DEM-related memory
+                if (demBitmap) {
+                    demBitmap.close();
+                }
+                
+                // Release canvas back to pool
+                if (demCanvas) {
+                    _canvasPool.release(demCanvas);
+                }
             }
         })();
 
@@ -670,6 +551,7 @@ L.GridLayer.Relief = L.GridLayer.extend({
     setAzimuth: function(azimuth) {
         if (typeof azimuth === 'number' && azimuth >= 0 && azimuth <= 360) {
             this.azimuth = azimuth;
+            this._recomputeHillshadeConstants();
             if (this.mode === 'hillshade') {
                 this.redraw();
             }
@@ -684,6 +566,7 @@ L.GridLayer.Relief = L.GridLayer.extend({
     setElevation: function(elevation) {
         if (typeof elevation === 'number' && elevation >= 0 && elevation <= 90) {
             this.elevation = elevation;
+            this._recomputeHillshadeConstants();
             if (this.mode === 'hillshade') {
                 this.redraw();
             }
@@ -726,6 +609,7 @@ L.GridLayer.Relief = L.GridLayer.extend({
         }
         
         if (needsRedraw && this.mode === 'hillshade') {
+            this._recomputeHillshadeConstants();
             this.redraw();
         }
         
@@ -747,10 +631,7 @@ L.gridLayer.relief = function(options) {
  */
 L.GridLayer.Relief.elevationExtractors = {
     terrarium: _defaultElevationExtractor,
-    mapbox: _mapboxElevationExtractor,
-    custom: function(extractorFn) {
-        return extractorFn;
-    }
+    mapbox: _mapboxElevationExtractor
 };
 
 })();

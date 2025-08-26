@@ -12,8 +12,8 @@ A Leaflet plugin for terrain visualization that renders relief maps showing hill
 
 - **Hillshade Mode**: Creates a shaded relief effect simulating sunlight on terrain
 - **Slope Mode**: Colors terrain based on steepness/gradient analysis
-- **High Performance**: Async tile loading with abort controllers to prevent memory leaks
-- **Cross-tile Boundaries**: Accurate calculations using 3x3 tile grids for gradient computation
+- **High Performance**: Async tile loading with abort controllers and canvas pooling to prevent memory leaks
+- **Edge Pixel Handling**: Intelligent edge clamping for accurate gradient calculations within tiles
 - **Attribution**: Automatically includes proper attribution for Mapzen elevation data
 
 ## Requirements
@@ -152,8 +152,7 @@ const customRelief = L.gridLayer.relief({
         // Custom decoding logic for your elevation format
         // Example: simple grayscale elevation (0-255m range)
         return r; // Use red channel as elevation in meters
-    },
-    maxCacheSize: 100  // Increase cache size for better performance
+    }
 });
 ```
 
@@ -330,7 +329,6 @@ Available via `L.GridLayer.Relief.elevationExtractors`:
 
 - `terrarium` - AWS Terrarium format decoder (default)
 - `mapbox` - Mapbox Terrain-RGB format decoder
-- `custom(fn)` - Wrapper for custom decoder functions
 
 #### Constructor Options
 
@@ -345,7 +343,6 @@ Available via `L.GridLayer.Relief.elevationExtractors`:
 | `slopeColorFunction` | `Function` | Default green→red | Custom color function for slope mode `function(slopeDegrees)` returns `[r, g, b]` |
 | `elevationUrl` | `String/Function` | AWS Terrarium | Custom elevation tile URL pattern or function |
 | `elevationExtractor` | `Function` | Terrarium decoder | Custom function to extract elevation from RGBA values |
-| `maxCacheSize` | `Number` | `50` | Maximum number of elevation tiles to cache |
 | `opacity` | `Number` | `1.0` | Layer opacity (0-1) |
 | `zIndex` | `Number` | `1` | Layer stacking order |
 | `attribution` | `String` | Mapzen Elevation | Attribution text for the elevation data source |
@@ -417,11 +414,11 @@ The plugin supports any RGB-encoded elevation tiles with configurable decoders:
 
 ## Performance Notes
 
-- Tiles are cached to prevent redundant network requests (LIFO cache, default 50 tiles, configurable via `maxCacheSize`)
 - Abort controllers cancel pending requests when tiles are unloaded
-- Cross-tile boundary handling requires 3x3 tile grids for accurate gradient calculations
+- Canvas pooling reduces memory allocation and garbage collection pressure
+- Edge pixel clamping provides accurate gradient calculations within single tiles
 - Latitude correction applied to pixel scaling for accurate slope measurements
-- Increase `maxCacheSize` for large maps or when panning frequently
+- `willReadFrequently` canvas optimization for efficient elevation data extraction
 
 ## Browser Support
 

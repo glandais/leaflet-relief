@@ -18,10 +18,10 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - Handles tile lifecycle events (load/unload)
 - Runtime configurable sun position (azimuth/elevation) for hillshade mode
 
-**Elevation Data System** (internal classes and functions in main file):
-- `_TileCache`: Manages fetching/caching elevation tiles with configurable sources
-- `_ElevationCache`: Pre-loads 3x3 tile grids to handle cross-tile boundary calculations
-- `_extractElevation`: Standalone function for extracting elevation data from RGBA pixel values
+**Elevation Data System** (internal functions in main file):
+- Direct fetch per tile with browser caching (no internal tile caching)
+- `_getElevation`: Method for extracting elevation data from RGBA pixel values  
+- `_canvasPool`: Adaptive canvas pooling for DEM data processing (grows on demand, trims when idle)
 - Supports multiple elevation formats: AWS Terrarium, Mapbox Terrain-RGB, custom extractors
 - Uses Terrarium RGB encoding by default: `elevation = (R*256 + G + B/256) - 32768` meters
 
@@ -33,19 +33,20 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 1. Leaflet requests tiles via `createTile(coords, done)`
 2. Plugin creates canvas and ImageData buffer
-3. `_ElevationCache` pre-loads 3x3 tile grid using `_TileCache`
-4. Mode-specific renderer processes each pixel:
-   - Uses `_extractElevation` to get elevation from RGBA data
-   - Calculates gradients using neighboring elevations
+3. Acquires canvas from pool for DEM data processing
+4. Fetches single elevation tile with abort controller
+5. Mode-specific renderer processes each pixel:
+   - Uses `_getElevation` to get elevation from RGBA data
+   - Calculates gradients using `_getZ` (with edge pixel clamping)
    - Applies hillshading or slope coloring algorithms
    - Handles no-data areas (elevation ≤ 0) as transparent
-5. Canvas receives processed pixel data and tile completes
+6. Canvas receives processed pixel data, releases pooled canvas, and tile completes
 
 ### Key Algorithms
 
 **Hillshading**: Uses surface normal vectors and sun direction dot product with gamma correction and ambient lighting. Default sun position: 315° azimuth (northwest), 45° elevation. Runtime configurable via `setAzimuth()`, `setElevation()`, or `setSunPosition()` methods.
 
-**Slope Calculation**: Horn's method with 8-neighbor kernel, latitude-corrected pixel scaling, and configurable color schemes. Default: green→red gradient. HSV-based presets provide smooth transitions with automatic edge case handling (out-of-bounds slopes use first/last range colors).
+**Slope Calculation**: Horn's method with 8-neighbor kernel, latitude-corrected pixel scaling, and configurable color schemes. Default: green→red gradient. HSV-based presets provide smooth transitions with automatic edge case handling (out-of-bounds slopes use first/last range colors). Edge pixels are clamped to valid tile boundaries for accurate gradient computation.
 
 ## Development
 
@@ -65,6 +66,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - **Configurable Extractors**: Built-in decoders for common formats plus custom extraction functions
 - **IIFE Wrapped**: Self-contained plugin that doesn't pollute global namespace
 - **Factory Function**: `L.gridLayer.relief(options)` for convenient layer creation
+- **Canvas Pooling**: Adaptive canvas pool for efficient memory management
 
 ### External Dependencies
 - Leaflet (peer dependency ^1.0.0)
@@ -84,10 +86,11 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - **Dependabot**: Weekly dependency updates with grouped PRs for dev dependencies
 
 ### Performance Considerations
-- `_TileCache` prevents redundant network requests (LIFO cache, default 50 tiles, configurable via `maxCacheSize`)
 - Abort controllers cancel pending requests when tiles are unloaded to prevent memory leaks
-- Cross-tile boundary handling requires 3x3 tile grids for accurate gradient calculations
-- `_extractElevation` function provides efficient RGBA-to-elevation conversion
+- Adaptive canvas pooling reduces memory allocation and garbage collection pressure
+- `willReadFrequently` canvas context optimization for efficient `getImageData` operations
+- Browser caching handles elevation tile caching (no internal cache complexity)
+- Edge pixel clamping provides accurate calculations without cross-tile fetching
 - Latitude correction applied to pixel scaling for accurate slope measurements
 - Async tile loading with proper error handling and cleanup
 
@@ -95,18 +98,21 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 **Class Hierarchy:**
 - `L.GridLayer.Relief` (main class extending `L.GridLayer`)
-  - `this.tileCache` (`_TileCache` instance) - Manages elevation tile fetching and caching
-  - Uses `_ElevationCache` for 3x3 tile grid management per render operation
-  - Uses `_extractElevation` for pixel-level elevation extraction
+  - `this.elevationUrl` - URL template or function for elevation tiles
+  - `this.elevationExtractor` - Function to extract elevation from RGBA pixel data
+  - Uses `_canvasPool` for efficient canvas resource management
+  - Uses `_getElevation` method for pixel-level elevation extraction
 
 **Function Organization:**
-- `_extractElevation(tileData, i, j, elevationExtractor)` - Pure function for elevation extraction
+- `_canvasPool` - Adaptive canvas pool (grows on demand, trims to 5 canvases when idle)
+- `_getElevation(tileData, j, i)` - Method for elevation extraction from RGBA data
+- `_getZ(tileData, i, j)` - Extracts 3x3 elevation grid with edge clamping for gradient calculations
 - `_defaultHillshadeColorFunction(intensity)` - Default grayscale color function for hillshade
 - `_createSlopeColorFunction(colorConfig)` - Generate slope color function from HSV config with edge case handling
 - `_defaultSlopeColorConfig` - Default green→red slope color scheme
 - `_slopeColorSchemes` - Preset slope color schemes (default, glacial, thermal, earth)
-- `_fillHillshadeTile(data, coords, abortSignal, layer)` - Hillshade rendering
-- `_fillSlopeTile(data, coords, abortSignal, layer)` - Slope rendering
+- `_fillHillshadeTile(data, tileData, coords, abortSignal)` - Hillshade rendering
+- `_fillSlopeTile(data, tileData, coords, abortSignal)` - Slope rendering
 - Built-in elevation extractors: `_defaultElevationExtractor`, `_mapboxElevationExtractor`
 
 ## Configuration Options
@@ -123,7 +129,6 @@ const reliefLayer = L.gridLayer.relief({
         return [value, value, value];
     },
     opacity: 0.6,             // Layer opacity
-    maxCacheSize: 50          // Max elevation tiles in cache
 });
 ```
 
@@ -183,7 +188,6 @@ const customRelief = L.gridLayer.relief({
 ### Built-in Elevation Extractors
 - `L.GridLayer.Relief.elevationExtractors.terrarium` - AWS Terrarium (default)
 - `L.GridLayer.Relief.elevationExtractors.mapbox` - Mapbox Terrain-RGB
-- `L.GridLayer.Relief.elevationExtractors.custom(fn)` - Custom wrapper function
 
 ## Development Commands
 
