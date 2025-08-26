@@ -15,6 +15,7 @@
 
 const _EARTH_CIRCUMFERENCE = 40075017;
 const TILE_SIZE = 256;
+const RGBA_EMPTY = [0, 0, 0, 0];
 
 // ====================== CANVAS POOL MANAGEMENT ======================
 
@@ -346,17 +347,7 @@ L.GridLayer.Relief = L.GridLayer.extend({
         ];
     },
 
-    /**
-     * fillHillshadeTile - Renders hillshade effect for a single map tile
-     * @param {Uint8ClampedArray} data - Canvas image data  
-     * @param {Object} coords - Tile coordinates {x, y, z}
-     * @param {AbortSignal} abortSignal - Abort controller signal
-     */
-    _fillHillshadeTile: async function (data, tileData, coords, abortSignal) {
-        const x = coords.x;
-        const y = coords.y;
-        const z = coords.z;
-
+    _fillTile: function (data, tileData, colorFunction, abortSignal) {
         // Main rendering loop
         for (let i = 0; i < TILE_SIZE; i++) {
             if (abortSignal && abortSignal.aborted) {
@@ -365,20 +356,15 @@ L.GridLayer.Relief = L.GridLayer.extend({
 
             for (let j = 0; j < TILE_SIZE; j++) {
                 // Get 3x3 elevation grid using Horn's method
-                const z = this._getZ(tileData, i, j)
+                const zData = this._getZ(tileData, i, j)
 
-                const hasNoData = z.some(v => v <= 0);
+                const hasNoData = zData.some(v => v <= 0);
 
-                const rgba = [0, 0, 0, 255];
+                let rgba = null;
                 if (!hasNoData) {
-                    var L = _getL(z, this._hillshadeA1, this._hillshadeA2, this._hillshadeA3);
-                    const [colorR, colorG, colorB] = this.hillshadeColorFunction(L);
-                    rgba[0] = colorR;
-                    rgba[1] = colorG;
-                    rgba[2] = colorB;
-                    rgba[3] = 255;
+                    rgba = colorFunction(zData);
                 } else {
-                    rgba[3] = 0;
+                    rgba = RGBA_EMPTY;
                 }
 
                 const pixelIndex = (j * TILE_SIZE + i) * 4;
@@ -391,53 +377,50 @@ L.GridLayer.Relief = L.GridLayer.extend({
     },
 
     /**
+     * fillHillshadeTile - Renders hillshade effect for a single map tile
+     * @param {Uint8ClampedArray} data - Canvas image data  
+     * @param {Object} coords - Tile coordinates {x, y, z}
+     * @param {AbortSignal} abortSignal - Abort controller signal
+     */
+    _fillHillshadeTile: function (data, tileData, coords, abortSignal) {
+        this._fillTile(data, tileData, zData => {
+            var L = _getL(zData, this._hillshadeA1, this._hillshadeA2, this._hillshadeA3);
+            const [colorR, colorG, colorB] = this.hillshadeColorFunction(L);
+            return [
+                colorR,
+                colorG,
+                colorB,
+                255
+            ]
+        }, abortSignal);
+    },
+
+    /**
      * fillSlopeTile - Renders slope visualization for a single map tile
      * @param {Uint8ClampedArray} data - Canvas image data
      * @param {Object} coords - Tile coordinates {x, y, z}
      * @param {AbortSignal} abortSignal - Abort controller signal
      */
-    _fillSlopeTile: async function (data, tileData, coords, abortSignal) {
-        const x = coords.x;
+    _fillSlopeTile: function (data, tileData, coords, abortSignal) {
         const y = coords.y;
         const z = coords.z;
 
         const pixelSizeMeters = _pixelSizeMeters(y, z);
 
-        // Main rendering loop
-        for (let i = 0; i < TILE_SIZE; i++) {
-            if (abortSignal && abortSignal.aborted) {
-                throw new DOMException('Tile loading aborted', 'AbortError');
+        this._fillTile(data, tileData, zData => {
+            const slopeDegrees = _getSlope(zData, pixelSizeMeters);
+            if (slopeDegrees < 0.5) {
+                return RGBA_EMPTY;
+            } else {
+                const slopeColor = this.slopeColorFunction(slopeDegrees);
+                return [
+                    slopeColor[0],
+                    slopeColor[1],
+                    slopeColor[2],
+                    255
+                ]
             }
-
-            for (let j = 0; j < TILE_SIZE; j++) {
-                const z = this._getZ(tileData, i, j)
-
-                const hasNoData = z.some(v => v <= 0);
-
-                const rgba = [0, 0, 0, 255];
-                if (!hasNoData) {
-                    const slopeDegrees = _getSlope(z, pixelSizeMeters);
-
-                    if (slopeDegrees < 0.5) {
-                        rgba[3] = 0;
-                    } else {
-                        const slopeColor = this.slopeColorFunction(slopeDegrees);
-                        rgba[0] = slopeColor[0];
-                        rgba[1] = slopeColor[1];
-                        rgba[2] = slopeColor[2];
-                        rgba[3] = 255;
-                    }
-                } else {
-                    rgba[3] = 0;
-                }
-
-                const pixelIndex = (j * TILE_SIZE + i) * 4;
-                data[pixelIndex] = rgba[0];
-                data[pixelIndex + 1] = rgba[1];
-                data[pixelIndex + 2] = rgba[2];
-                data[pixelIndex + 3] = rgba[3];
-            }
-        }
+        }, abortSignal);
     },
 
     /**
