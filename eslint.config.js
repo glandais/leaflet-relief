@@ -61,7 +61,7 @@ module.exports = [
         },
     },
     {
-        files: ['src/**/*.ts', 'test/**/*.ts', '*.ts'],
+        files: ['src/**/*.ts', 'test/**/*.ts', 'e2e/**/*.ts', '*.ts'],
         languageOptions: {
             ecmaVersion: 2021,
             sourceType: 'module',
@@ -118,6 +118,38 @@ module.exports = [
             '@typescript-eslint/explicit-function-return-type': 'off',
             '@typescript-eslint/no-explicit-any': 'warn',
             '@typescript-eslint/no-inferrable-types': 'off',
+        },
+    },
+    {
+        files: ['e2e/**/*.ts'],
+        languageOptions: {
+            ecmaVersion: 2021,
+            sourceType: 'module',
+            parser: tsparser,
+            globals: {
+                // Playwright globals
+                expect: 'readonly',
+                test: 'readonly',
+                describe: 'readonly',
+                beforeEach: 'readonly',
+                afterEach: 'readonly',
+                // Browser environment (for page.waitForFunction context)
+                window: 'readonly',
+                document: 'readonly',
+                console: 'readonly',
+            },
+        },
+        plugins: {
+            '@typescript-eslint': tseslint,
+            prettier: prettierPlugin,
+        },
+        rules: {
+            'prettier/prettier': 'error',
+            '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+            'no-unused-vars': 'off',
+            'no-console': 'off',
+            // Allow any types in test files for convenience
+            '@typescript-eslint/no-explicit-any': 'off',
         },
     },
 ];
