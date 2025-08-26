@@ -10,14 +10,14 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 ### Core Components
 
-**L.GridLayer.Relief** (`src/L.GridLayer.Relief.js`): Main plugin class extending `L.GridLayer`
+**L.GridLayer.Relief** (`src/L.GridLayer.Relief.ts`): Main plugin class extending `L.GridLayer` (TypeScript implementation)
 
 - Self-contained single-file plugin with all functionality
 - Creates 256x256 canvas tiles for terrain visualization
 - Supports two modes: 'hillshade' and 'slope'
 - Manages async tile loading with abort controllers to prevent memory leaks
 - Handles tile lifecycle events (load/unload)
-- Runtime configurable sun position (azimuth/elevation) for hillshade mode
+- Sun position (azimuth/elevation) configurable at initialization for hillshade mode
 
 **Elevation Data System** (internal functions in main file):
 
@@ -29,7 +29,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 **Rendering Modes** (internal functions):
 
-- **Hillshade** (`_fillHillshadeTile`): Simulates sunlight on terrain using surface normals and dot product calculations with runtime configurable sun position
+- **Hillshade** (`_fillHillshadeTile`): Simulates sunlight on terrain using surface normals and dot product calculations with sun position set at initialization
 - **Slope** (`_fillSlopeTile`): Colors terrain by steepness using Horn's method for gradient calculation and HSV-to-RGB color mapping (green=flat, red=steep)
 
 ### Data Flow
@@ -47,7 +47,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 ### Key Algorithms
 
-**Hillshading**: Uses surface normal vectors and sun direction dot product with gamma correction and ambient lighting. Default sun position: 315° azimuth (northwest), 45° elevation. Runtime configurable via `setAzimuth()`, `setElevation()`, or `setSunPosition()` methods.
+**Hillshading**: Uses surface normal vectors and sun direction dot product with gamma correction and ambient lighting. Default sun position: 315° azimuth (northwest), 45° elevation. Configurable at initialization via options.
 
 **Slope Calculation**: Horn's method with 8-neighbor kernel, latitude-corrected pixel scaling, and configurable color schemes. Default: green→red gradient. HSV-based presets provide smooth transitions with automatic edge case handling (out-of-bounds slopes use first/last range colors). Edge pixels are clamped to valid tile boundaries for accurate gradient computation.
 
@@ -55,9 +55,13 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 ### File Structure
 
-- `src/L.GridLayer.Relief.js` - Complete plugin implementation (all functionality in single file)
+- `src/L.GridLayer.Relief.ts` - Complete plugin implementation in TypeScript (all functionality in single file)
+- `dist/leaflet-relief.min.js` - Minified production build
+- `dist/leaflet-relief.umd.js` - UMD module format
+- `dist/leaflet-relief.esm.js` - ES module format
+- `dist/L.GridLayer.Relief.d.ts` - TypeScript type definitions
 - `index.html` - Interactive demo with controls for azimuth/elevation adjustment
-- `test/L.GridLayer.Relief.test.js` - Jest unit tests for plugin functionality
+- `test/L.GridLayer.Relief.test.ts` - Jest unit tests for plugin functionality (TypeScript)
 - `README.md` - Comprehensive plugin documentation
 - `package.json` - NPM package configuration with semantic-release
 - `LICENSE` - MIT license
@@ -66,10 +70,10 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 ### Key Features
 
-- **Runtime Configuration**: Azimuth and elevation angles adjustable at runtime with automatic tile rerendering
+- **Initial Configuration**: Azimuth and elevation angles set at layer initialization
 - **Custom Elevation Sources**: Support for different tile providers (AWS Terrarium, Mapbox, custom URLs)
 - **Configurable Extractors**: Built-in decoders for common formats plus custom extraction functions
-- **IIFE Wrapped**: Self-contained plugin that doesn't pollute global namespace
+- **Modern ES Module**: TypeScript implementation with proper type definitions
 - **Factory Function**: `L.gridLayer.relief(options)` for convenient layer creation
 - **Canvas Pooling**: Adaptive canvas pool for efficient memory management
 
@@ -133,8 +137,8 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 ```javascript
 const reliefLayer = L.gridLayer.relief({
     mode: 'hillshade', // 'hillshade' or 'slope'
-    azimuth: 315, // Sun azimuth (0-360°) for hillshade
-    elevation: 45, // Sun elevation (0-90°) for hillshade
+    hillshadeAzimuth: 315, // Sun azimuth (0-360°) for hillshade
+    hillshadeElevation: 45, // Sun elevation (0-90°) for hillshade
     hillshadeColorFunction: function (intensity) {
         // Custom color function (optional, defaults to grayscale)
         const value = Math.round(intensity * 255);
@@ -180,12 +184,15 @@ const advancedSlope = L.gridLayer.relief({
 // - No unexpected fallback colors
 ```
 
-### Runtime Sun Position Changes
+### Dynamic Sun Position
 
 ```javascript
-reliefLayer.setAzimuth(180); // Change to south lighting
-reliefLayer.setElevation(30); // Lower sun angle
-reliefLayer.setSunPosition(90, 60); // East lighting, high sun
+// Sun position set at initialization (not changeable at runtime)
+const reliefLayer = L.gridLayer.relief({
+    mode: 'hillshade',
+    hillshadeAzimuth: 180, // South lighting
+    hillshadeElevation: 30, // Lower sun angle
+});
 ```
 
 ### Custom Elevation Sources

@@ -107,14 +107,6 @@ describe('L.GridLayer.Relief', () => {
             const layer = L.gridLayer.relief({ elevationExtractor: extractor });
             expect(layer._elevationExtractor).toBe(extractor);
         });
-
-        it('should set noWrap bounds when noWrap is true', () => {
-            const layer = L.gridLayer.relief({ noWrap: true });
-            expect((layer.options as any).bounds).toEqual([
-                [-90, -180],
-                [90, 180],
-            ]);
-        });
     });
 
     describe('Hillshade Configuration', () => {

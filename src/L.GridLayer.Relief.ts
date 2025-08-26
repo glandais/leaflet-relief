@@ -79,7 +79,6 @@ export interface ReliefOptions extends L.GridLayerOptions {
     slopeColorScheme?: 'default' | 'glacial' | 'thermal' | 'earth';
     elevationUrl?: string | ElevationUrlFunction;
     elevationExtractor?: ElevationExtractorFunction;
-    noWrap?: boolean;
 }
 
 export type HillshadeColorFunction = (intensity: number) => [number, number, number];
@@ -324,13 +323,6 @@ const ReliefLayerClass = L.GridLayer.extend({
     },
 
     initialize: function (this: any, options?: ReliefOptions) {
-        if (options && options.noWrap && !options.bounds) {
-            options.bounds = [
-                [-90, -180],
-                [90, 180],
-            ] as L.LatLngBoundsExpression;
-        }
-
         (L.GridLayer.prototype as any).initialize.call(this, options);
 
         this._mode = (options && options.mode) || 'hillshade';

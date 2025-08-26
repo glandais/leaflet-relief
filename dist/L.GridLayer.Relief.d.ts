@@ -46,7 +46,6 @@ export interface ReliefOptions extends L.GridLayerOptions {
     slopeColorScheme?: 'default' | 'glacial' | 'thermal' | 'earth';
     elevationUrl?: string | ElevationUrlFunction;
     elevationExtractor?: ElevationExtractorFunction;
-    noWrap?: boolean;
 }
 export type HillshadeColorFunction = (intensity: number) => [number, number, number];
 export type SlopeColorFunction = (slopeDegrees: number) => [number, number, number];

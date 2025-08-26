@@ -53,8 +53,8 @@ import * as L from 'leaflet';
 // Type-safe options
 const reliefOptions: L.GridLayer.ReliefOptions = {
     mode: 'hillshade',
-    azimuth: 315,
-    elevation: 45,
+    hillshadeAzimuth: 315,
+    hillshadeElevation: 45,
     opacity: 0.6,
 };
 
@@ -81,7 +81,11 @@ const relief = L.gridLayer.relief(reliefOptions);
 
 ```html
 <!-- Download and host locally -->
-<script src="path/to/L.GridLayer.Relief.js"></script>
+<!-- For production, use the minified version -->
+<script src="path/to/leaflet-relief.min.js"></script>
+
+<!-- Or use the UMD version -->
+<script src="path/to/leaflet-relief.umd.js"></script>
 ```
 
 ## Usage
@@ -105,8 +109,8 @@ hillshadeLayer.addTo(map);
 // Create hillshade with custom sun position
 const customHillshade = L.gridLayer.relief({
     mode: 'hillshade',
-    azimuth: 135, // Southeast sun direction
-    elevation: 60, // High sun angle
+    hillshadeAzimuth: 135, // Southeast sun direction
+    hillshadeElevation: 60, // High sun angle
     opacity: 0.7,
 });
 
@@ -139,25 +143,6 @@ const sepiaHillshade = L.gridLayer.relief({
         return [r, g, b];
     },
 });
-```
-
-### Runtime Sun Position Changes
-
-```javascript
-// Create hillshade layer
-const hillshade = L.gridLayer.relief({ mode: 'hillshade' });
-hillshade.addTo(map);
-
-// Change sun position at runtime (automatically redraws)
-hillshade.setAzimuth(90); // East lighting
-hillshade.setElevation(30); // Lower sun angle
-
-// Or set both at once (single redraw)
-hillshade.setSunPosition(180, 60); // South lighting, high sun
-
-// Get current values
-console.log('Azimuth:', hillshade.getAzimuth());
-console.log('Elevation:', hillshade.getElevation());
 ```
 
 ### Custom Elevation Sources
@@ -289,8 +274,6 @@ const customFunctionSlope = L.gridLayer.relief({
 
 ### Complete Example
 
-#### HTML Setup
-
 ```html
 <!DOCTYPE html>
 <html>
@@ -317,54 +300,40 @@ const customFunctionSlope = L.gridLayer.relief({
         <!-- Leaflet JS -->
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
         <!-- Relief Plugin -->
-        <script src="https://glandais.github.io/leaflet-relief/src/L.GridLayer.Relief.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/leaflet-relief@latest/dist/leaflet-relief.min.js"></script>
+
+        <script>
+            // Initialize map
+            const map = L.map('map').setView([45.8326, 6.8652], 12); // Mont Blanc, France
+
+            // Add base layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+            }).addTo(map);
+
+            // Add relief layer with custom options
+            const reliefLayer = L.gridLayer.relief({
+                mode: 'hillshade',
+                hillshadeAzimuth: 315,
+                hillshadeElevation: 45,
+                opacity: 0.6,
+                zIndex: 100,
+                // Standard Leaflet GridLayer options
+                minZoom: 5,
+                maxZoom: 15,
+            });
+
+            reliefLayer.addTo(map);
+        </script>
     </body>
 </html>
-```
-
-#### JavaScript Usage
-
-```javascript
-// Initialize map
-const map = L.map('map').setView([45.8326, 6.8652], 12); // Mont Blanc, France
-
-// Add base layer
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors',
-}).addTo(map);
-
-// Add relief layer with custom options
-const reliefLayer = L.gridLayer.relief({
-    mode: 'hillshade',
-    opacity: 0.6,
-    zIndex: 100,
-    // Standard Leaflet GridLayer options
-    minZoom: 5,
-    maxZoom: 15,
-});
-
-reliefLayer.addTo(map);
-
-// Switch between modes dynamically
-function switchToSlope() {
-    // Remove current layer
-    map.removeLayer(reliefLayer);
-    // Create new slope layer
-    const slopeLayer = L.gridLayer.relief({
-        mode: 'slope',
-        slopeColorScheme: 'glacial',
-        opacity: 0.6,
-        zIndex: 100,
-    });
-    slopeLayer.addTo(map);
-}
 ```
 
 ## API Reference
 
 ### L.GridLayer.Relief
 
-Extends `L.GridLayer` to provide terrain visualization capabilities.
+Extends [`L.GridLayer`](https://leafletjs.com/reference.html#gridlayer) to provide terrain visualization capabilities.
 
 ### Factory Function
 
@@ -379,45 +348,34 @@ Available via `L.GridLayer.Relief.elevationExtractors`:
 
 #### Constructor Options
 
+Inherits all options from [`L.GridLayer`](https://leafletjs.com/reference.html#gridlayer) plus the following relief-specific options:
+
 | Option                   | Type              | Default           | Description                                                                          |
 | ------------------------ | ----------------- | ----------------- | ------------------------------------------------------------------------------------ |
 | `mode`                   | `String`          | `'hillshade'`     | Visualization mode: `'hillshade'` or `'slope'`                                       |
-| `azimuth`                | `Number`          | `315`             | Sun azimuth angle in degrees (0-360°) for hillshade mode                             |
-| `elevation`              | `Number`          | `45`              | Sun elevation angle in degrees (0-90°) for hillshade mode                            |
+| `hillshadeAzimuth`       | `Number`          | `315`             | Sun azimuth angle in degrees (0-360°) for hillshade mode                             |
+| `hillshadeElevation`     | `Number`          | `45`              | Sun elevation angle in degrees (0-90°) for hillshade mode                            |
 | `hillshadeColorFunction` | `Function`        | Grayscale         | Custom color function for hillshade mode `function(intensity)` returns `[r, g, b]`   |
 | `slopeColorScheme`       | `String`          | `'default'`       | Preset color scheme for slope mode: `'default'`, `'glacial'`, `'thermal'`, `'earth'` |
 | `slopeColorConfig`       | `Array`           | Default HSV       | Custom HSV slope-to-hue mapping array for slope mode                                 |
 | `slopeColorFunction`     | `Function`        | Default green→red | Custom color function for slope mode `function(slopeDegrees)` returns `[r, g, b]`    |
 | `elevationUrl`           | `String/Function` | AWS Terrarium     | Custom elevation tile URL pattern or function                                        |
 | `elevationExtractor`     | `Function`        | Terrarium decoder | Custom function to extract elevation from RGBA values                                |
-| `opacity`                | `Number`          | `1.0`             | Layer opacity (0-1)                                                                  |
-| `zIndex`                 | `Number`          | `1`               | Layer stacking order                                                                 |
-| `attribution`            | `String`          | Mapzen Elevation  | Attribution text for the elevation data source                                       |
 
 **Note**: Slope color options are mutually exclusive (XOR): only one of `slopeColorScheme`, `slopeColorConfig`, or `slopeColorFunction` should be used.
 
-All standard [Leaflet GridLayer options](https://leafletjs.com/reference.html#gridlayer) are also supported.
-
 #### Methods
 
-Inherits all methods from `L.GridLayer`. Key methods:
+Inherits all methods from [`L.GridLayer`](https://leafletjs.com/reference.html#gridlayer). Key methods:
 
 - `addTo(map)` - Add layer to map
 - `remove()` - Remove layer from map
 - `redraw()` - Force layer to redraw all tiles
 - `setOpacity(opacity)` - Change layer opacity
 
-**Hillshade-specific methods:**
-
-- `setAzimuth(azimuth)` - Set sun azimuth angle (0-360°) and redraw
-- `setElevation(elevation)` - Set sun elevation angle (0-90°) and redraw
-- `setSunPosition(azimuth, elevation)` - Set both angles and redraw
-- `getAzimuth()` - Get current azimuth angle
-- `getElevation()` - Get current elevation angle
-
 #### Events
 
-Inherits all events from `L.GridLayer`:
+Inherits all events from [`L.GridLayer`](https://leafletjs.com/reference.html#gridlayer):
 
 - `loading` - Fired when tiles start loading
 - `load` - Fired when all tiles have loaded
