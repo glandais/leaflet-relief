@@ -490,15 +490,32 @@
             }
         });
         
+        // Debounce utility function
+        function debounce(func, delay) {
+            let timeoutId;
+            return function(...args) {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+
+        // Debounced update functions for sun position
+        const debouncedUpdateSunPosition = debounce(() => {
+            if (reliefVisible && reliefLayer.mode === 'hillshade') {
+                const azimuth = parseInt(azimuthSlider.value);
+                const elevation = parseInt(elevationSlider.value);
+                // Update both parameters at once for better performance
+                reliefLayer.setSunPosition(azimuth, elevation);
+            }
+        }, 150); // 150ms delay
+
         // Azimuth control
         azimuthSlider.addEventListener('input', (e) => {
             const azimuth = parseInt(e.target.value);
             azimuthValue.textContent = azimuth + '°';
             
-            if (reliefVisible && reliefLayer.mode === 'hillshade') {
-                // Update azimuth at runtime (automatically redraws)
-                reliefLayer.setAzimuth(azimuth);
-            }
+            // Update display immediately but debounce the actual layer update
+            debouncedUpdateSunPosition();
         });
         
         // Elevation control
@@ -506,10 +523,8 @@
             const elevation = parseInt(e.target.value);
             elevationValue.textContent = elevation + '°';
             
-            if (reliefVisible && reliefLayer.mode === 'hillshade') {
-                // Update elevation at runtime (automatically redraws)
-                reliefLayer.setElevation(elevation);
-            }
+            // Update display immediately but debounce the actual layer update
+            debouncedUpdateSunPosition();
         });
         
         // Color scheme control

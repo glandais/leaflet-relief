@@ -13,8 +13,6 @@
  * to create the visual effects on 256x256 pixel canvas tiles.
  */
 
-// ====================== INTERNAL ELEVATION MANAGEMENT ======================
-
 const _EARTH_CIRCUMFERENCE = 40075017;
 const TILE_SIZE = 256;
 
@@ -63,6 +61,8 @@ const _canvasPool = {
     }
 };
 
+// ====================== ELEVATION SOURCE ======================
+
 /**
  * Default elevation tile URL pattern (AWS Terrarium)
  * @param {number} z - Zoom level
@@ -98,6 +98,25 @@ const _mapboxElevationExtractor = function(r, g, b, a) {
     return -10000 + ((r * 256 * 256 + g * 256 + b) * 0.1);
 };
 
+const _getDzdx = function(z, divider) {
+    return ((z[2] + 2 * z[5] + z[8]) - (z[0] + 2 * z[3] + z[6])) / (8 * divider);
+};
+
+const _getDzdy = function(z, divider) {
+    return ((z[0] + 2 * z[1] + z[2]) - (z[6] + 2 * z[7] + z[8])) / (8 * divider);
+};
+
+// ====================== INTERNAL HILLSHADE FUNCTIONS ======================
+
+const _getL = function(z, a1, a2, a3) {
+    let dzdx = _getDzdx(z, 5);
+    let dzdy = _getDzdy(z, 5);
+    var L = (a1 - a2 * dzdx - a3 * dzdy) / Math.sqrt(1 + dzdx ** 2 + dzdy ** 2);
+    if (L < 0) L = 0;
+    L = Math.sqrt(L * .8 + .2);
+    return L;
+};
+
 /**
  * Default hillshade color function (grayscale)
  * @param {number} intensity - Light intensity (0-1)
@@ -108,22 +127,7 @@ const _defaultHillshadeColorFunction = function(intensity) {
     return [value, value, value];
 };
 
-const _getDzdx = function(z, divider) {
-    return ((z[2] + 2 * z[5] + z[8]) - (z[0] + 2 * z[3] + z[6])) / (8 * divider);
-};
-
-const _getDzdy = function(z, divider) {
-    return ((z[0] + 2 * z[1] + z[2]) - (z[6] + 2 * z[7] + z[8])) / (8 * divider);
-};
-
-const _getL = function(z, a1, a2, a3) {
-    let dzdx = _getDzdx(z, 5);
-    let dzdy = _getDzdy(z, 5);
-    var L = (a1 - a2 * dzdx - a3 * dzdy) / Math.sqrt(1 + dzdx ** 2 + dzdy ** 2);
-    if (L < 0) L = 0;
-    L = Math.sqrt(L * .8 + .2);
-    return L;
-};
+// ====================== INTERNAL SLOPE FUNCTIONS ======================
 
 const _pixelSizeMeters = function(y, z) {
     const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z);
@@ -139,8 +143,6 @@ const _getSlope = function(z, pixelSizeMeters) {
     const slopeDegrees = Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy)) * 180 / Math.PI;
     return slopeDegrees;
 };
-
-// ====================== INTERNAL SLOPE FUNCTIONS ======================
 
 /**
  * Convert HSV to RGB
