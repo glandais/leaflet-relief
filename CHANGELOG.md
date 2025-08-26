@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/glandais/leaflet-relief/compare/v1.2.0...v1.3.0) (2025-08-26)
+
+
+### Features
+
+* typescript ([3b53cd2](https://github.com/glandais/leaflet-relief/commit/3b53cd250ac30f4a235a2c8f1af05bf06d4809cf))
+
 # [1.2.0](https://github.com/glandais/leaflet-relief/compare/v1.1.0...v1.2.0) (2025-08-26)
 
 
