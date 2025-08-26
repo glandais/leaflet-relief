@@ -8,6 +8,7 @@ declare global {
                     terrarium: ElevationExtractorFunction;
                     mapbox: ElevationExtractorFunction;
                 };
+                options: ReliefOptions;
                 _tileUnloaded(coords: L.Coords): void;
                 _getElevation(tileData: Uint8ClampedArray, j: number, i: number): number;
                 _getZ(tileData: Uint8ClampedArray, i: number, j: number): number[];
@@ -18,23 +19,19 @@ declare global {
                 _fillHillshadeTile(data: Uint8ClampedArray, tileData: Uint8ClampedArray, coords: L.Coords, abortSignal?: AbortSignal): void;
                 _createSlopeColor(zData: number[], pixelScaleMeters: number): [number, number, number, number];
                 _fillSlopeTile(data: Uint8ClampedArray, tileData: Uint8ClampedArray, coords: L.Coords, abortSignal?: AbortSignal): void;
-                _mode: 'hillshade' | 'slope';
-                _hillshadeAzimuth: number;
-                _hillshadeElevation: number;
-                _hillshadeA1: number;
-                _hillshadeA2: number;
-                _hillshadeA3: number;
-                _hillshadeColorFunction: HillshadeColorFunction;
-                _slopeColorFunction: SlopeColorFunction;
-                _elevationUrl: string | ElevationUrlFunction;
-                _elevationExtractor: ElevationExtractorFunction;
-                _abortControllers: any;
+                _state: ReliefState;
             }
         }
         namespace gridLayer {
             function relief(options?: ReliefOptions): L.GridLayer.Relief;
         }
     }
+}
+export interface ReliefState {
+    hillshadeA1: number;
+    hillshadeA2: number;
+    hillshadeA3: number;
+    abortControllers: globalThis.Map<string, AbortController>;
 }
 export interface ReliefOptions extends L.GridLayerOptions {
     mode?: 'hillshade' | 'slope';
