@@ -22,13 +22,22 @@ const RGBA_EMPTY = [0, 0, 0, 0];
 /**
  * Internal canvas pool for DEM tile fetching
  * Grows unbounded during usage, trims to idle size after timeout
+ * @namespace _canvasPool
  */
 const _canvasPool = {
+    /** @type {HTMLCanvasElement[]} Available canvas elements */
     available: [],
+    /** @type {number} Target pool size when idle */
     idleSize: 5,
+    /** @type {number} Timeout before trimming pool (ms) */
     idleTimeout: 30000, // 30 seconds
+    /** @type {number|null} Timer ID for idle trimming */
     idleTimer: null,
     
+    /**
+     * Acquire a canvas from the pool
+     * @returns {HTMLCanvasElement} Canvas element
+     */
     acquire() {
         let canvas = this.available.pop();
         if (!canvas) {
@@ -40,6 +49,10 @@ const _canvasPool = {
         return canvas;
     },
     
+    /**
+     * Release a canvas back to the pool
+     * @param {HTMLCanvasElement} canvas - Canvas to return to pool
+     */
     release(canvas) {
         if (canvas) {
             this.available.push(canvas);
@@ -47,6 +60,10 @@ const _canvasPool = {
         }
     },
     
+    /**
+     * Reset the idle timer for pool trimming
+     * @private
+     */
     _resetIdleTimer() {
         if (this.idleTimer) {
             clearTimeout(this.idleTimer);
@@ -54,6 +71,10 @@ const _canvasPool = {
         this.idleTimer = setTimeout(() => this._trim(), this.idleTimeout);
     },
     
+    /**
+     * Trim pool to idle size
+     * @private
+     */
     _trim() {
         // Trim pool to idle size
         while (this.available.length > this.idleSize) {
@@ -80,10 +101,10 @@ const _defaultElevationUrl = function(z, x, y) {
  * @param {number} r - Red channel value (0-255)
  * @param {number} g - Green channel value (0-255)
  * @param {number} b - Blue channel value (0-255)
- * @param {number} a - Alpha channel value (0-255) - unused in Terrarium format
+ * @param {number} _a - Alpha channel value (0-255) - unused in Terrarium format
  * @returns {number} Elevation in meters
  */
-const _defaultElevationExtractor = function(r, g, b, a) {
+const _defaultElevationExtractor = function(r, g, b, _a) {
     return (r * 256 + g + b / 256) - 32768;
 };
 
@@ -92,23 +113,43 @@ const _defaultElevationExtractor = function(r, g, b, a) {
  * @param {number} r - Red channel value (0-255)
  * @param {number} g - Green channel value (0-255)
  * @param {number} b - Blue channel value (0-255)
- * @param {number} a - Alpha channel value (0-255) - unused
+ * @param {number} _a - Alpha channel value (0-255) - unused
  * @returns {number} Elevation in meters
  */
-const _mapboxElevationExtractor = function(r, g, b, a) {
+const _mapboxElevationExtractor = function(r, g, b, _a) {
     return -10000 + ((r * 256 * 256 + g * 256 + b) * 0.1);
 };
 
+/**
+ * Calculate horizontal gradient (dz/dx) using Horn's method
+ * @param {number[]} z - 3x3 elevation array from _getZ
+ * @param {number} divider - Pixel size scaling factor in meters
+ * @returns {number} Horizontal gradient
+ */
 const _getDzdx = function(z, divider) {
     return ((z[2] + 2 * z[5] + z[8]) - (z[0] + 2 * z[3] + z[6])) / (8 * divider);
 };
 
+/**
+ * Calculate vertical gradient (dz/dy) using Horn's method
+ * @param {number[]} z - 3x3 elevation array from _getZ
+ * @param {number} divider - Pixel size scaling factor in meters
+ * @returns {number} Vertical gradient
+ */
 const _getDzdy = function(z, divider) {
     return ((z[0] + 2 * z[1] + z[2]) - (z[6] + 2 * z[7] + z[8])) / (8 * divider);
 };
 
 // ====================== INTERNAL HILLSHADE FUNCTIONS ======================
 
+/**
+ * Calculate hillshade light intensity using surface normal dot product
+ * @param {number[]} z - 3x3 elevation array from _getZ
+ * @param {number} a1 - Precomputed sin(elevation) constant
+ * @param {number} a2 - Precomputed cos(elevation) * sin(azimuth) constant
+ * @param {number} a3 - Precomputed cos(elevation) * cos(azimuth) constant
+ * @returns {number} Light intensity (0-1)
+ */
 const _getL = function(z, a1, a2, a3) {
     let dzdx = _getDzdx(z, 5);
     let dzdy = _getDzdy(z, 5);
@@ -130,6 +171,12 @@ const _defaultHillshadeColorFunction = function(intensity) {
 
 // ====================== INTERNAL SLOPE FUNCTIONS ======================
 
+/**
+ * Calculate pixel size in meters for latitude correction
+ * @param {number} y - Tile Y coordinate
+ * @param {number} z - Zoom level
+ * @returns {number} Pixel size in meters at this latitude
+ */
 const _pixelSizeMeters = function(y, z) {
     const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z);
     const latitude = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
@@ -138,6 +185,12 @@ const _pixelSizeMeters = function(y, z) {
     return Math.max(0.1, metersPerPixelEquator * Math.cos(clampedLatitude));
 };
 
+/**
+ * Calculate slope in degrees using Horn's method
+ * @param {number[]} z - 3x3 elevation array from _getZ
+ * @param {number} pixelSizeMeters - Pixel size scaling factor
+ * @returns {number} Slope angle in degrees
+ */
 const _getSlope = function(z, pixelSizeMeters) {
     const dzdx = _getDzdx(z, pixelSizeMeters);
     const dzdy = _getDzdy(z, pixelSizeMeters);
@@ -146,7 +199,11 @@ const _getSlope = function(z, pixelSizeMeters) {
 };
 
 /**
- * Convert HSV to RGB
+ * Convert HSV color values to RGB
+ * @param {number} h - Hue (0-360 degrees)
+ * @param {number} s - Saturation (0-1)
+ * @param {number} v - Value/brightness (0-1)
+ * @returns {number[]} RGBA array [r, g, b, a]
  */
 const _slopeHsvToRgb = (h, s, v) => {
     while (h < 0) h = h + 360;
@@ -182,6 +239,8 @@ const _slopeHsvToRgb = (h, s, v) => {
 
 /**
  * Default slope-to-color mapping configuration (green to red)
+ * Each entry maps a slope range to a hue range for smooth color transitions
+ * @type {Array<{slope: {min: number, max: number}, h: {min: number, max: number}}>}
  */
 const _defaultSlopeColorConfig = [
     { slope: { min: 0, max: 3 }, h: { min: 120, max: 60 } },    // Green to yellow for flat
@@ -192,6 +251,7 @@ const _defaultSlopeColorConfig = [
 
 /**
  * Predefined slope color schemes
+ * @type {Object<string, Array>} Named color schemes with slope-to-hue mappings
  */
 const _slopeColorSchemes = {
     default: _defaultSlopeColorConfig,
@@ -244,12 +304,34 @@ const _createSlopeColorFunction = function(colorConfig) {
 };
 
 // ====================== MAIN PLUGIN CLASS ======================
+
+/**
+ * L.GridLayer.Relief - Main plugin class for terrain visualization
+ * Extends Leaflet's GridLayer to render elevation data as hillshade or slope overlays
+ * 
+ * @class L.GridLayer.Relief
+ * @extends L.GridLayer
+ */
 L.GridLayer.Relief = L.GridLayer.extend({
 
     options: {
         attribution: '&copy; <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank">Mapzen Elevation</a>'
     },
 
+    /**
+     * Initialize the Relief layer with options
+     * @param {Object} options - Configuration options
+     * @param {string} [options.mode='hillshade'] - Rendering mode: 'hillshade' or 'slope'
+     * @param {number} [options.azimuth=315] - Sun azimuth angle (0-360 degrees)
+     * @param {number} [options.elevation=45] - Sun elevation angle (0-90 degrees)
+     * @param {Function} [options.hillshadeColorFunction] - Custom hillshade color function
+     * @param {Function} [options.slopeColorFunction] - Custom slope color function
+     * @param {Array} [options.slopeColorConfig] - HSV slope color configuration
+     * @param {string} [options.slopeColorScheme] - Named slope color scheme
+     * @param {string|Function} [options.elevationUrl] - URL template or function for elevation tiles
+     * @param {Function} [options.elevationExtractor] - Elevation extraction function
+     * @param {boolean} [options.noWrap] - Prevent tile wrapping beyond world bounds
+     */
     initialize: function(options) {
         // Set global bounds if noWrap is enabled to prevent tile wrapping
         if (options && options.noWrap && !options.bounds) {
@@ -299,6 +381,10 @@ L.GridLayer.Relief = L.GridLayer.extend({
         });
     },
 
+    /**
+     * Recompute hillshade lighting constants based on current sun position
+     * @private
+     */
     _recomputeHillshadeConstants() {
         const alpha = Math.PI / 180 * this.azimuth;
         const beta = Math.PI / 180 * this.elevation;
@@ -310,9 +396,8 @@ L.GridLayer.Relief = L.GridLayer.extend({
     /**
      * Extract elevation from RGBA pixel data
      * @param {Uint8ClampedArray} tileData - Tile pixel data
-     * @param {number} i - Pixel row
      * @param {number} j - Pixel column
-     * @param {Function} elevationExtractor - Extraction function
+     * @param {number} i - Pixel row
      * @returns {number} Elevation in meters
      */
     _getElevation: function(tileData, j, i) {
@@ -325,6 +410,14 @@ L.GridLayer.Relief = L.GridLayer.extend({
     },
 
 
+    /**
+     * Get 3x3 elevation grid around pixel using Horn's method with edge clamping
+     * @private
+     * @param {Uint8ClampedArray} tileData - Tile pixel data
+     * @param {number} i - Pixel row
+     * @param {number} j - Pixel column
+     * @returns {number[]} Array of 9 elevation values in 3x3 grid
+     */
     _getZ: function(tileData, i, j) {
         // Clamp coordinates to valid tile boundaries (1-254) to avoid edge pixels
         if (i <= 0 || j <= 0 || i >= (TILE_SIZE - 1) || j >= (TILE_SIZE - 1)) {
@@ -347,6 +440,14 @@ L.GridLayer.Relief = L.GridLayer.extend({
         ];
     },
 
+    /**
+     * Generic tile filling function for both hillshade and slope modes
+     * @private
+     * @param {Uint8ClampedArray} data - Canvas image data array
+     * @param {Uint8ClampedArray} tileData - Elevation tile data
+     * @param {Function} colorFunction - Function to compute color from elevation grid
+     * @param {AbortSignal} abortSignal - Abort signal for canceling operation
+     */
     _fillTile: function (data, tileData, colorFunction, abortSignal) {
         // Main rendering loop
         for (let i = 0; i < TILE_SIZE; i++) {
@@ -377,12 +478,14 @@ L.GridLayer.Relief = L.GridLayer.extend({
     },
 
     /**
-     * fillHillshadeTile - Renders hillshade effect for a single map tile
-     * @param {Uint8ClampedArray} data - Canvas image data  
-     * @param {Object} coords - Tile coordinates {x, y, z}
-     * @param {AbortSignal} abortSignal - Abort controller signal
+     * Render hillshade effect for a single map tile
+     * @private
+     * @param {Uint8ClampedArray} data - Canvas image data array
+     * @param {Uint8ClampedArray} tileData - Elevation tile data
+     * @param {Object} _coords - Tile coordinates {x, y, z} - unused in hillshade mode
+     * @param {AbortSignal} abortSignal - Abort signal for canceling operation
      */
-    _fillHillshadeTile: function (data, tileData, coords, abortSignal) {
+    _fillHillshadeTile: function (data, tileData, _coords, abortSignal) {
         this._fillTile(data, tileData, zData => {
             var L = _getL(zData, this._hillshadeA1, this._hillshadeA2, this._hillshadeA3);
             const [colorR, colorG, colorB] = this.hillshadeColorFunction(L);
@@ -396,10 +499,12 @@ L.GridLayer.Relief = L.GridLayer.extend({
     },
 
     /**
-     * fillSlopeTile - Renders slope visualization for a single map tile
-     * @param {Uint8ClampedArray} data - Canvas image data
+     * Render slope visualization for a single map tile
+     * @private
+     * @param {Uint8ClampedArray} data - Canvas image data array
+     * @param {Uint8ClampedArray} tileData - Elevation tile data
      * @param {Object} coords - Tile coordinates {x, y, z}
-     * @param {AbortSignal} abortSignal - Abort controller signal
+     * @param {AbortSignal} abortSignal - Abort signal for canceling operation
      */
     _fillSlopeTile: function (data, tileData, coords, abortSignal) {
         const y = coords.y;
@@ -426,6 +531,7 @@ L.GridLayer.Relief = L.GridLayer.extend({
     /**
      * Clean up when a tile is unloaded (e.g., when panning away)
      * Aborts any pending HTTP requests for elevation data to prevent memory leaks
+     * @param {Object} coords - Tile coordinates {x, y, z}
      */
     tileUnloaded: function(coords) {
         const tileKey = `${coords.z}/${coords.x}/${coords.y}`;
