@@ -334,10 +334,11 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
-    <!-- Relief Plugin -->
-    <script src="src/L.GridLayer.Relief.js"></script>
+    <!-- Relief Plugin (UMD build) -->
+    <script src="dist/leaflet-relief.umd.js"></script>
     
     <script>
+
         // Color scheme functions for hillshade
         const colorSchemes = {
             grayscale: function(intensity) {
@@ -383,17 +384,6 @@
             attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(map);
         
-        // Create relief layer (starts with hillshade mode)
-        let reliefLayer = L.gridLayer.relief({
-            mode: 'hillshade',
-            azimuth: 315,
-            elevation: 45,
-            hillshadeColorFunction: colorSchemes.grayscale,
-            opacity: 0.6,
-            zIndex: 100
-        });
-        reliefLayer.addTo(map);
-        
         // Get control elements
         const hillshadeBtn = document.getElementById('hillshadeBtn');
         const slopeBtn = document.getElementById('slopeBtn');
@@ -410,55 +400,47 @@
         const slopeControls = document.getElementById('slopeControls');
         
         let reliefVisible = true;
-        
-        // Button event handlers
-        hillshadeBtn.addEventListener('click', () => {
+        let reliefLayer = undefined;
+        let mode = 'hillshade';
+        updateLayer();
+
+        function updateLayer() {
             if (reliefVisible) {
-                // Remove current layer and create new hillshade layer
-                map.removeLayer(reliefLayer);
+                if (reliefLayer) {
+                    map.removeLayer(reliefLayer);
+                }
                 reliefLayer = L.gridLayer.relief({
-                    mode: 'hillshade',
-                    azimuth: parseInt(azimuthSlider.value),
-                    elevation: parseInt(elevationSlider.value),
+                    mode: mode,
+                    hillshadeAzimuth: parseInt(azimuthSlider.value),
+                    hillshadeElevation: parseInt(elevationSlider.value),
                     hillshadeColorFunction: colorSchemes[colorSchemeSelect.value],
-                    opacity: opacitySlider.value / 100,
-                    zIndex: 100
-                });
-                reliefLayer.addTo(map);
-            } else {
-                // Just update the stored layer mode for when it's shown
-                reliefLayer.options.mode = 'hillshade';
-            }
-            
-            hillshadeBtn.classList.add('active');
-            slopeBtn.classList.remove('active');
-            hillshadeControls.style.display = 'flex';
-            slopeControls.style.display = 'none';
-            
-            // Sync slider values with layer settings if layer exists
-            if (reliefLayer && reliefLayer.getAzimuth && reliefLayer.getElevation) {
-                azimuthSlider.value = reliefLayer.getAzimuth();
-                azimuthValue.textContent = reliefLayer.getAzimuth() + '°';
-                elevationSlider.value = reliefLayer.getElevation();
-                elevationValue.textContent = reliefLayer.getElevation() + '°';
-            }
-        });
-        
-        slopeBtn.addEventListener('click', () => {
-            if (reliefVisible) {
-                // Remove current layer and create new slope layer
-                map.removeLayer(reliefLayer);
-                reliefLayer = L.gridLayer.relief({
-                    mode: 'slope',
                     slopeColorScheme: slopeColorSelect.value,
                     opacity: opacitySlider.value / 100,
                     zIndex: 100
                 });
                 reliefLayer.addTo(map);
             } else {
-                // Just update the stored layer mode for when it's shown
-                reliefLayer.options.mode = 'slope';
+                if (reliefLayer) {
+                    map.removeLayer(reliefLayer);
+                    reliefLayer = undefined;
+                }
             }
+        }
+
+        // Button event handlers
+        hillshadeBtn.addEventListener('click', () => {
+            mode = 'hillshade';
+            updateLayer();
+            
+            hillshadeBtn.classList.add('active');
+            slopeBtn.classList.remove('active');
+            hillshadeControls.style.display = 'flex';
+            slopeControls.style.display = 'none';
+        });
+        
+        slopeBtn.addEventListener('click', () => {
+            mode = 'slope';
+            updateLayer();
             
             slopeBtn.classList.add('active');
             hillshadeBtn.classList.remove('active');
@@ -468,95 +450,44 @@
         
         toggleBtn.addEventListener('click', () => {
             if (reliefVisible) {
-                map.removeLayer(reliefLayer);
                 toggleBtn.textContent = 'Show Relief';
                 reliefVisible = false;
             } else {
-                reliefLayer.addTo(map);
                 toggleBtn.textContent = 'Hide Relief';
                 reliefVisible = true;
             }
+            updateLayer();
         });
         
         // Opacity control
         opacitySlider.addEventListener('input', (e) => {
             const opacity = e.target.value / 100;
             opacityValue.textContent = e.target.value + '%';
-            
-            if (reliefVisible) {
-                reliefLayer.setOpacity(opacity);
-            } else {
-                reliefLayer.options.opacity = opacity;
-            }
+            updateLayer();
         });
-        
-        // Debounce utility function
-        function debounce(func, delay) {
-            let timeoutId;
-            return function(...args) {
-                clearTimeout(timeoutId);
-                timeoutId = setTimeout(() => func.apply(this, args), delay);
-            };
-        }
-
-        // Debounced update functions for sun position
-        const debouncedUpdateSunPosition = debounce(() => {
-            if (reliefVisible && reliefLayer.mode === 'hillshade') {
-                const azimuth = parseInt(azimuthSlider.value);
-                const elevation = parseInt(elevationSlider.value);
-                // Update both parameters at once for better performance
-                reliefLayer.setSunPosition(azimuth, elevation);
-            }
-        }, 150); // 150ms delay
 
         // Azimuth control
         azimuthSlider.addEventListener('input', (e) => {
             const azimuth = parseInt(e.target.value);
             azimuthValue.textContent = azimuth + '°';
-            
-            // Update display immediately but debounce the actual layer update
-            debouncedUpdateSunPosition();
+            updateLayer();
         });
         
         // Elevation control
         elevationSlider.addEventListener('input', (e) => {
             const elevation = parseInt(e.target.value);
             elevationValue.textContent = elevation + '°';
-            
-            // Update display immediately but debounce the actual layer update
-            debouncedUpdateSunPosition();
+            updateLayer();
         });
         
         // Color scheme control
         colorSchemeSelect.addEventListener('change', (e) => {
-            if (reliefVisible && reliefLayer.mode === 'hillshade') {
-                // Recreate layer with new color scheme
-                map.removeLayer(reliefLayer);
-                reliefLayer = L.gridLayer.relief({
-                    mode: 'hillshade',
-                    azimuth: parseInt(azimuthSlider.value),
-                    elevation: parseInt(elevationSlider.value),
-                    hillshadeColorFunction: colorSchemes[e.target.value],
-                    opacity: opacitySlider.value / 100,
-                    zIndex: 100
-                });
-                reliefLayer.addTo(map);
-            }
+            updateLayer();
         });
         
         // Slope color scheme control
         slopeColorSelect.addEventListener('change', (e) => {
-            if (reliefVisible && reliefLayer.mode === 'slope') {
-                // Recreate layer with new color scheme
-                map.removeLayer(reliefLayer);
-                reliefLayer = L.gridLayer.relief({
-                    mode: 'slope',
-                    slopeColorScheme: e.target.value,
-                    opacity: opacitySlider.value / 100,
-                    zIndex: 100
-                });
-                reliefLayer.addTo(map);
-            }
+            updateLayer();
         });
         
         // Add some location presets for easy navigation
@@ -593,11 +524,6 @@
         });
         
         document.querySelector('.controls').appendChild(locationSelect);
-        
-        // Add map click handler to show coordinates (helpful for testing)
-        map.on('click', (e) => {
-            console.log('Clicked at:', e.latlng.lat.toFixed(6), e.latlng.lng.toFixed(6));
-        });
     </script>
 </body>
 </html>

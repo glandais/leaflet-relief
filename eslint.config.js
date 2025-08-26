@@ -1,4 +1,6 @@
 const js = require('@eslint/js');
+const tseslint = require('@typescript-eslint/eslint-plugin');
+const tsparser = require('@typescript-eslint/parser');
 const prettier = require('eslint-config-prettier');
 const prettierPlugin = require('eslint-plugin-prettier');
 
@@ -9,7 +11,7 @@ module.exports = [
         ignores: ['node_modules/', 'coverage/', 'dist/', 'build/', '.github/', '*.min.js'],
     },
     {
-        files: ['src/**/*.js', 'test/**/*.js', '*.js'],
+        files: ['*.js'],
         languageOptions: {
             ecmaVersion: 2021,
             sourceType: 'script',
@@ -56,6 +58,66 @@ module.exports = [
             eqeqeq: ['error', 'always'],
             curly: ['error', 'all'],
             'brace-style': ['error', '1tbs'],
+        },
+    },
+    {
+        files: ['src/**/*.ts', 'test/**/*.ts', '*.ts'],
+        languageOptions: {
+            ecmaVersion: 2021,
+            sourceType: 'module',
+            parser: tsparser,
+            globals: {
+                L: 'readonly',
+                // Node.js globals
+                module: 'readonly',
+                require: 'readonly',
+                process: 'readonly',
+                __dirname: 'readonly',
+                __filename: 'readonly',
+                global: 'readonly',
+                // Browser globals
+                window: 'readonly',
+                document: 'readonly',
+                console: 'readonly',
+                fetch: 'readonly',
+                createImageBitmap: 'readonly',
+                DOMException: 'readonly',
+                AbortController: 'readonly',
+                setTimeout: 'readonly',
+                clearTimeout: 'readonly',
+                Blob: 'readonly',
+                HTMLCanvasElement: 'readonly',
+                HTMLElement: 'readonly',
+                ImageBitmap: 'readonly',
+                AbortSignal: 'readonly',
+                CanvasRenderingContext2D: 'readonly',
+                // Jest globals
+                describe: 'readonly',
+                it: 'readonly',
+                test: 'readonly',
+                expect: 'readonly',
+                beforeEach: 'readonly',
+                afterEach: 'readonly',
+                jest: 'readonly',
+            },
+        },
+        plugins: {
+            '@typescript-eslint': tseslint,
+            prettier: prettierPlugin,
+        },
+        rules: {
+            'prettier/prettier': 'error',
+            '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+            'no-unused-vars': 'off',
+            'no-console': 'off',
+            'no-var': 'error',
+            'prefer-const': 'error',
+            eqeqeq: ['error', 'always'],
+            curly: ['error', 'all'],
+            'brace-style': ['error', '1tbs'],
+            '@typescript-eslint/explicit-function-return-type': 'off',
+            '@typescript-eslint/no-explicit-any': 'warn',
+            '@typescript-eslint/no-inferrable-types': 'off',
         },
     },
 ];

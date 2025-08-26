@@ -1,0 +1,614 @@
+import * as L from 'leaflet';
+
+declare global {
+    namespace L {
+        namespace GridLayer {
+            class Relief extends L.GridLayer {
+                constructor(options?: ReliefOptions);
+                static elevationExtractors: {
+                    terrarium: ElevationExtractorFunction;
+                    mapbox: ElevationExtractorFunction;
+                };
+                // Private methods
+                _tileUnloaded(coords: L.Coords): void;
+
+                _getElevation(tileData: Uint8ClampedArray, j: number, i: number): number;
+                _getZ(tileData: Uint8ClampedArray, i: number, j: number): number[];
+
+                _fillTile: (
+                    data: Uint8ClampedArray,
+                    tileData: Uint8ClampedArray,
+                    coords: L.Coords,
+                    abortSignal?: AbortSignal
+                ) => void;
+                _doFillTile(
+                    data: Uint8ClampedArray,
+                    tileData: Uint8ClampedArray,
+                    colorFunction: ColorFunction,
+                    abortSignal?: AbortSignal
+                ): void;
+
+                _recomputeHillshadeConstants(): void;
+                _createHillshadeColor(zData: number[]): [number, number, number, number];
+                _fillHillshadeTile(
+                    data: Uint8ClampedArray,
+                    tileData: Uint8ClampedArray,
+                    coords: L.Coords,
+                    abortSignal?: AbortSignal
+                ): void;
+
+                _createSlopeColor(
+                    zData: number[],
+                    pixelScaleMeters: number
+                ): [number, number, number, number];
+                _fillSlopeTile(
+                    data: Uint8ClampedArray,
+                    tileData: Uint8ClampedArray,
+                    coords: L.Coords,
+                    abortSignal?: AbortSignal
+                ): void;
+
+                // Private properties
+                _mode: 'hillshade' | 'slope';
+                _hillshadeAzimuth: number;
+                _hillshadeElevation: number;
+                _hillshadeA1: number;
+                _hillshadeA2: number;
+                _hillshadeA3: number;
+                _hillshadeColorFunction: HillshadeColorFunction;
+                _slopeColorFunction: SlopeColorFunction;
+                _elevationUrl: string | ElevationUrlFunction;
+                _elevationExtractor: ElevationExtractorFunction;
+                _abortControllers: any; // Map<string, AbortController>
+            }
+        }
+        namespace gridLayer {
+            function relief(options?: ReliefOptions): L.GridLayer.Relief;
+        }
+    }
+}
+
+// Type definitions
+export interface ReliefOptions extends L.GridLayerOptions {
+    mode?: 'hillshade' | 'slope';
+    hillshadeAzimuth?: number;
+    hillshadeElevation?: number;
+    hillshadeColorFunction?: HillshadeColorFunction;
+    slopeColorFunction?: SlopeColorFunction;
+    slopeColorConfig?: SlopeColorConfig[];
+    slopeColorScheme?: 'default' | 'glacial' | 'thermal' | 'earth';
+    elevationUrl?: string | ElevationUrlFunction;
+    elevationExtractor?: ElevationExtractorFunction;
+    noWrap?: boolean;
+}
+
+export type HillshadeColorFunction = (intensity: number) => [number, number, number];
+export type SlopeColorFunction = (slopeDegrees: number) => [number, number, number];
+export type ElevationUrlFunction = (z: number, x: number, y: number) => string;
+export type ElevationExtractorFunction = (r: number, g: number, b: number, a: number) => number;
+
+type ColorFunction = (zData: number[]) => [number, number, number, number];
+
+export interface SlopeColorConfig {
+    slope: { min: number; max: number };
+    h: { min: number; max: number };
+}
+
+export interface SlopeColorSchemes {
+    [key: string]: SlopeColorConfig[];
+}
+
+// Internal interfaces
+interface CanvasPool {
+    available: HTMLCanvasElement[];
+    idleSize: number;
+    idleTimeout: number;
+    idleTimer: number | null;
+    acquire(): HTMLCanvasElement;
+    release(canvas: HTMLCanvasElement): void;
+    _resetIdleTimer(): void;
+    _trim(): void;
+}
+
+// Modern ES module - no IIFE wrapper needed
+
+const _EARTH_CIRCUMFERENCE = 40075017;
+const TILE_SIZE = 256;
+const RGBA_EMPTY: [number, number, number, number] = [0, 0, 0, 0];
+
+// ====================== CANVAS POOL MANAGEMENT ======================
+
+const _canvasPool: CanvasPool = {
+    available: [],
+    idleSize: 5,
+    idleTimeout: 30000, // 30 seconds
+    idleTimer: null,
+
+    acquire(): HTMLCanvasElement {
+        let canvas = this.available.pop();
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.width = TILE_SIZE;
+            canvas.height = TILE_SIZE;
+        }
+        this._resetIdleTimer();
+        return canvas;
+    },
+
+    release(canvas: HTMLCanvasElement): void {
+        if (canvas) {
+            this.available.push(canvas);
+            this._resetIdleTimer();
+        }
+    },
+
+    _resetIdleTimer(): void {
+        if (this.idleTimer) {
+            clearTimeout(this.idleTimer);
+        }
+        this.idleTimer = setTimeout(() => this._trim(), this.idleTimeout) as any;
+    },
+
+    _trim(): void {
+        while (this.available.length > this.idleSize) {
+            this.available.pop();
+        }
+    },
+};
+
+// ====================== ELEVATION SOURCE ======================
+
+const _defaultElevationUrl: ElevationUrlFunction = function (
+    z: number,
+    x: number,
+    y: number
+): string {
+    return `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+};
+
+const _defaultElevationExtractor: ElevationExtractorFunction = function (
+    r: number,
+    g: number,
+    b: number,
+    _a: number
+): number {
+    return r * 256 + g + b / 256 - 32768;
+};
+
+const _mapboxElevationExtractor: ElevationExtractorFunction = function (
+    r: number,
+    g: number,
+    b: number,
+    _a: number
+): number {
+    return -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
+};
+
+const _getDzdx = function (z: number[], divider: number): number {
+    return (z[2] + 2 * z[5] + z[8] - (z[0] + 2 * z[3] + z[6])) / (8 * divider);
+};
+
+const _getDzdy = function (z: number[], divider: number): number {
+    return (z[0] + 2 * z[1] + z[2] - (z[6] + 2 * z[7] + z[8])) / (8 * divider);
+};
+
+// ====================== INTERNAL HILLSHADE FUNCTIONS ======================
+
+const _getL = function (z: number[], a1: number, a2: number, a3: number): number {
+    const dzdx = _getDzdx(z, 5);
+    const dzdy = _getDzdy(z, 5);
+    let L = (a1 - a2 * dzdx - a3 * dzdy) / Math.sqrt(1 + dzdx ** 2 + dzdy ** 2);
+    if (L < 0) {
+        L = 0;
+    }
+    L = Math.sqrt(L * 0.8 + 0.2);
+    return L;
+};
+
+const _defaultHillshadeColorFunction: HillshadeColorFunction = function (
+    intensity: number
+): [number, number, number] {
+    const value = Math.round(intensity * 255);
+    return [value, value, value];
+};
+
+// ====================== INTERNAL SLOPE FUNCTIONS ======================
+
+const _pixelSizeMeters = function (y: number, z: number): number {
+    const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
+    const latitude = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+    const metersPerPixelEquator = _EARTH_CIRCUMFERENCE / (TILE_SIZE * Math.pow(2, z));
+    const clampedLatitude = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, latitude));
+    return Math.max(0.1, metersPerPixelEquator * Math.cos(clampedLatitude));
+};
+
+const _getSlope = function (z: number[], pixelSizeMeters: number): number {
+    const dzdx = _getDzdx(z, pixelSizeMeters);
+    const dzdy = _getDzdy(z, pixelSizeMeters);
+    const slopeDegrees = (Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy)) * 180) / Math.PI;
+    return slopeDegrees;
+};
+
+const _slopeHsvToRgb = (h: number, s: number, v: number): [number, number, number, number] => {
+    while (h < 0) {
+        h = h + 360;
+    }
+    while (h > 360) {
+        h = h - 360;
+    }
+
+    h = h / 60;
+    const c = v * s;
+    const x = c * (1 - Math.abs((h % 2) - 1));
+    const m = v - c;
+
+    let r: number, g: number, b: number;
+    if (h >= 0 && h < 1) {
+        [r, g, b] = [c, x, 0];
+    } else if (h >= 1 && h < 2) {
+        [r, g, b] = [x, c, 0];
+    } else if (h >= 2 && h < 3) {
+        [r, g, b] = [0, c, x];
+    } else if (h >= 3 && h < 4) {
+        [r, g, b] = [0, x, c];
+    } else if (h >= 4 && h < 5) {
+        [r, g, b] = [x, 0, c];
+    } else {
+        [r, g, b] = [c, 0, x];
+    }
+
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255), 255];
+};
+
+const _defaultSlopeColorConfig: SlopeColorConfig[] = [
+    { slope: { min: 0, max: 3 }, h: { min: 120, max: 60 } },
+    { slope: { min: 3, max: 9 }, h: { min: 60, max: 20 } },
+    { slope: { min: 9, max: 30 }, h: { min: 20, max: -20 } },
+    { slope: { min: 30, max: 60 }, h: { min: -20, max: -60 } },
+];
+
+const _slopeColorSchemes: SlopeColorSchemes = {
+    default: _defaultSlopeColorConfig,
+    glacial: [
+        { slope: { min: 0, max: 5 }, h: { min: 240, max: 200 } },
+        { slope: { min: 5, max: 15 }, h: { min: 200, max: 160 } },
+        { slope: { min: 15, max: 30 }, h: { min: 160, max: 120 } },
+        { slope: { min: 30, max: 60 }, h: { min: 120, max: 60 } },
+        { slope: { min: 60, max: 90 }, h: { min: 60, max: 0 } },
+    ],
+    thermal: [
+        { slope: { min: 0, max: 10 }, h: { min: 280, max: 320 } },
+        { slope: { min: 10, max: 25 }, h: { min: 320, max: 360 } },
+        { slope: { min: 25, max: 45 }, h: { min: 0, max: 40 } },
+        { slope: { min: 45, max: 65 }, h: { min: 40, max: 60 } },
+    ],
+    earth: [
+        { slope: { min: 0, max: 5 }, h: { min: 60, max: 40 } },
+        { slope: { min: 5, max: 15 }, h: { min: 40, max: 20 } },
+        { slope: { min: 15, max: 35 }, h: { min: 20, max: 10 } },
+        { slope: { min: 35, max: 55 }, h: { min: 10, max: 0 } },
+    ],
+};
+
+const _createSlopeColorFunction = function (colorConfig: SlopeColorConfig[]): SlopeColorFunction {
+    return function (slopeDegrees: number): [number, number, number] {
+        if (slopeDegrees < colorConfig[0].slope.min) {
+            return _slopeHsvToRgb(colorConfig[0].h.min, 1, 1).slice(0, 3) as [
+                number,
+                number,
+                number,
+            ];
+        }
+
+        for (let i = 0; i < colorConfig.length; i++) {
+            const range = colorConfig[i];
+            if (slopeDegrees >= range.slope.min && slopeDegrees <= range.slope.max) {
+                const slopeRatio =
+                    (slopeDegrees - range.slope.min) / (range.slope.max - range.slope.min);
+                const h = range.h.min + slopeRatio * (range.h.max - range.h.min);
+                return _slopeHsvToRgb(h, 1, 1).slice(0, 3) as [number, number, number];
+            }
+        }
+
+        const lastRange = colorConfig[colorConfig.length - 1];
+        return _slopeHsvToRgb(lastRange.h.max, 1, 1).slice(0, 3) as [number, number, number];
+    };
+};
+
+// ====================== MAIN PLUGIN CLASS ======================
+
+const ReliefLayerClass = L.GridLayer.extend({
+    options: {
+        attribution:
+            '&copy; <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank">Mapzen Elevation</a>',
+    },
+
+    initialize: function (this: any, options?: ReliefOptions) {
+        if (options && options.noWrap && !options.bounds) {
+            options.bounds = [
+                [-90, -180],
+                [90, 180],
+            ] as L.LatLngBoundsExpression;
+        }
+
+        (L.GridLayer.prototype as any).initialize.call(this, options);
+
+        this._mode = (options && options.mode) || 'hillshade';
+
+        this._hillshadeAzimuth =
+            options && typeof options.hillshadeAzimuth === 'number'
+                ? options.hillshadeAzimuth
+                : 315;
+        this._hillshadeElevation =
+            options && typeof options.hillshadeElevation === 'number'
+                ? options.hillshadeElevation
+                : 45;
+        this._recomputeHillshadeConstants();
+
+        this._hillshadeColorFunction =
+            (options && options.hillshadeColorFunction) || _defaultHillshadeColorFunction;
+
+        if (options && options.slopeColorFunction) {
+            this._slopeColorFunction = options.slopeColorFunction;
+        } else if (options && options.slopeColorConfig) {
+            this._slopeColorFunction = _createSlopeColorFunction(options.slopeColorConfig);
+        } else if (options && options.slopeColorScheme) {
+            const scheme =
+                _slopeColorSchemes[options.slopeColorScheme] || _slopeColorSchemes.default;
+            this._slopeColorFunction = _createSlopeColorFunction(scheme);
+        } else {
+            this._slopeColorFunction = _createSlopeColorFunction(_defaultSlopeColorConfig);
+        }
+
+        this._elevationUrl = (options && options.elevationUrl) || _defaultElevationUrl;
+
+        this._elevationExtractor =
+            (options && options.elevationExtractor) || _defaultElevationExtractor;
+
+        this._abortControllers = new Map<string, AbortController>();
+
+        this.on('tileunload', function (this: L.GridLayer.Relief, e: any) {
+            this._tileUnloaded(e.coords);
+        });
+    },
+
+    _fillTile: async function (
+        data: Uint8ClampedArray,
+        tileData: Uint8ClampedArray,
+        coords: L.Coords,
+        abortSignal?: AbortSignal
+    ) {
+        if (this._mode === 'hillshade') {
+            this._fillHillshadeTile(data, tileData, coords, abortSignal);
+        } else {
+            this._fillSlopeTile(data, tileData, coords, abortSignal);
+        }
+    },
+
+    _recomputeHillshadeConstants: function () {
+        const alpha = (Math.PI / 180) * this._hillshadeAzimuth;
+        const beta = (Math.PI / 180) * this._hillshadeElevation;
+        this._hillshadeA1 = Math.sin(beta);
+        this._hillshadeA2 = Math.cos(beta) * Math.sin(alpha);
+        this._hillshadeA3 = Math.cos(beta) * Math.cos(alpha);
+    },
+
+    _getElevation: function (tileData: Uint8ClampedArray, j: number, i: number): number {
+        const pixelIndex = (i * TILE_SIZE + j) * 4;
+        const r = tileData[pixelIndex];
+        const g = tileData[pixelIndex + 1];
+        const b = tileData[pixelIndex + 2];
+        const a = tileData[pixelIndex + 3];
+        return this._elevationExtractor(r, g, b, a);
+    },
+
+    _getZ: function (tileData: Uint8ClampedArray, i: number, j: number): number[] {
+        if (i <= 0 || j <= 0 || i >= TILE_SIZE - 1 || j >= TILE_SIZE - 1) {
+            const clampedI = Math.max(1, Math.min(i, TILE_SIZE - 2));
+            const clampedJ = Math.max(1, Math.min(j, TILE_SIZE - 2));
+            return this._getZ(tileData, clampedI, clampedJ);
+        }
+
+        return [
+            this._getElevation(tileData, i - 1, j - 1),
+            this._getElevation(tileData, i - 1, j),
+            this._getElevation(tileData, i - 1, j + 1),
+            this._getElevation(tileData, i, j - 1),
+            this._getElevation(tileData, i, j),
+            this._getElevation(tileData, i, j + 1),
+            this._getElevation(tileData, i + 1, j - 1),
+            this._getElevation(tileData, i + 1, j),
+            this._getElevation(tileData, i + 1, j + 1),
+        ];
+    },
+
+    _doFillTile: function (
+        data: Uint8ClampedArray,
+        tileData: Uint8ClampedArray,
+        colorFunction: ColorFunction,
+        abortSignal?: AbortSignal
+    ): void {
+        for (let i = 0; i < TILE_SIZE; i++) {
+            if (abortSignal && abortSignal.aborted) {
+                throw new DOMException('Tile loading aborted', 'AbortError');
+            }
+
+            for (let j = 0; j < TILE_SIZE; j++) {
+                const zData = this._getZ(tileData, i, j);
+                const hasNoData = zData.some((v: number) => v <= 0);
+
+                let rgba: [number, number, number, number];
+                if (!hasNoData) {
+                    rgba = colorFunction(zData);
+                } else {
+                    rgba = RGBA_EMPTY;
+                }
+
+                const pixelIndex = (j * TILE_SIZE + i) * 4;
+                data[pixelIndex] = rgba[0];
+                data[pixelIndex + 1] = rgba[1];
+                data[pixelIndex + 2] = rgba[2];
+                data[pixelIndex + 3] = rgba[3];
+            }
+        }
+    },
+
+    _createHillshadeColor: function (zData: number[]): [number, number, number, number] {
+        const L = _getL(zData, this._hillshadeA1, this._hillshadeA2, this._hillshadeA3);
+        const [colorR, colorG, colorB] = this._hillshadeColorFunction(L);
+        return [colorR, colorG, colorB, 255];
+    },
+
+    _fillHillshadeTile: function (
+        data: Uint8ClampedArray,
+        tileData: Uint8ClampedArray,
+        _coords: L.Coords,
+        abortSignal?: AbortSignal
+    ): void {
+        this._doFillTile(
+            data,
+            tileData,
+            (zData: number[]) => this._createHillshadeColor(zData),
+            abortSignal
+        );
+    },
+
+    _createSlopeColor: function (
+        zData: number[],
+        pixelSizeMeters: number
+    ): [number, number, number, number] {
+        const slopeDegrees = _getSlope(zData, pixelSizeMeters);
+        if (slopeDegrees < 0.5) {
+            return RGBA_EMPTY;
+        } else {
+            const slopeColor = this._slopeColorFunction(slopeDegrees);
+            return [slopeColor[0], slopeColor[1], slopeColor[2], 255];
+        }
+    },
+
+    _fillSlopeTile: function (
+        data: Uint8ClampedArray,
+        tileData: Uint8ClampedArray,
+        coords: L.Coords,
+        abortSignal?: AbortSignal
+    ): void {
+        const y = coords.y;
+        const z = coords.z;
+
+        const pixelSizeMeters = _pixelSizeMeters(y, z);
+
+        this._doFillTile(
+            data,
+            tileData,
+            (zData: number[]) => this._createSlopeColor(zData, pixelSizeMeters),
+            abortSignal
+        );
+    },
+
+    _tileUnloaded: function (coords: L.Coords): void {
+        const tileKey = `${coords.z}/${coords.x}/${coords.y}`;
+        if (this._abortControllers.has(tileKey)) {
+            const abortController = this._abortControllers.get(tileKey);
+            if (abortController) {
+                abortController.abort();
+                this._abortControllers.delete(tileKey);
+            }
+        }
+    },
+
+    createTile: function (coords: L.Coords, done: L.DoneCallback): HTMLElement {
+        const x = coords.x;
+        const y = coords.y;
+        const z = coords.z;
+        const tileKey = `${z}/${x}/${y}`;
+
+        const tile = document.createElement('canvas');
+        tile.setAttribute('width', TILE_SIZE.toString());
+        tile.setAttribute('height', TILE_SIZE.toString());
+
+        const ctx = tile.getContext('2d');
+        if (!ctx) {
+            throw new Error('Unable to get 2d context from canvas');
+        }
+
+        const imageData = ctx.createImageData(256, 256);
+
+        const abortController = new AbortController();
+        this._abortControllers.set(tileKey, abortController);
+
+        const url =
+            typeof this._elevationUrl === 'function'
+                ? this._elevationUrl(z, x, y)
+                : this._elevationUrl
+                      .replace('{z}', z.toString())
+                      .replace('{x}', x.toString())
+                      .replace('{y}', y.toString());
+
+        (async () => {
+            let demBitmap: ImageBitmap | null = null;
+            let demCanvas: HTMLCanvasElement | null = null;
+            let demCtx: CanvasRenderingContext2D | null = null;
+
+            try {
+                demCanvas = _canvasPool.acquire();
+                demCtx = demCanvas.getContext('2d', { willReadFrequently: true });
+                if (!demCtx) {
+                    throw new Error('Unable to get 2d context from DEM canvas');
+                }
+
+                const demResponse = await fetch(url, { signal: abortController.signal });
+                if (!demResponse.ok) {
+                    throw new Error(`Failed to fetch tile: ${demResponse.status}`);
+                }
+
+                const demBlob = await demResponse.blob();
+                demBitmap = await createImageBitmap(demBlob);
+
+                demCtx.drawImage(demBitmap, 0, 0);
+
+                const demImageData = demCtx.getImageData(0, 0, TILE_SIZE, TILE_SIZE);
+                const demTileData = demImageData.data;
+
+                await this._fillTile(imageData.data, demTileData, coords, abortController.signal);
+
+                if (!abortController.signal.aborted) {
+                    ctx.putImageData(imageData, 0, 0);
+                    done(undefined, tile);
+                }
+            } catch (error) {
+                if (error instanceof Error && error.name !== 'AbortError') {
+                    console.error(`Error loading tile ${tileKey}:`, error);
+                }
+            } finally {
+                this._abortControllers.delete(tileKey);
+
+                if (demBitmap) {
+                    demBitmap.close();
+                }
+
+                if (demCanvas) {
+                    _canvasPool.release(demCanvas);
+                }
+            }
+        })();
+
+        return tile;
+    },
+
+    tileUnloaded: function (coords: L.Coords): void {
+        this._tileUnloaded(coords);
+    },
+});
+
+// Assign the class to the L namespace
+L.GridLayer.Relief = ReliefLayerClass as any;
+
+L.gridLayer.relief = function (options?: ReliefOptions): L.GridLayer.Relief {
+    return new L.GridLayer.Relief(options);
+};
+
+L.GridLayer.Relief.elevationExtractors = {
+    terrarium: _defaultElevationExtractor,
+    mapbox: _mapboxElevationExtractor,
+};
+// Types are already exported above - no need to re-export

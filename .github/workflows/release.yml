@@ -38,6 +38,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Build dist files
+        run: npm run build
+
       - name: Verify access
         run: npm whoami
         env:

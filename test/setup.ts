@@ -1,6 +1,7 @@
 // Setup file for Jest tests
-// Mock Canvas API
-global.HTMLCanvasElement.prototype.getContext = jest.fn(() => ({
+
+// Mock Canvas API with simplified types
+const createMockCanvasContext = () => ({
     fillRect: jest.fn(),
     clearRect: jest.fn(),
     getImageData: jest.fn(() => ({
@@ -33,19 +34,25 @@ global.HTMLCanvasElement.prototype.getContext = jest.fn(() => ({
         width: 256,
         height: 256,
     },
-}));
+});
+
+global.HTMLCanvasElement.prototype.getContext = jest.fn(() =>
+    createMockCanvasContext()
+) as jest.Mock;
 
 // Mock Image constructor
-global.Image = class {
+global.Image = class MockImage {
+    public onload: (() => void) | null = null;
+    public onerror: (() => void) | null = null;
+    private _src = '';
+    public width = 256;
+    public height = 256;
+
     constructor() {
-        this.onload = null;
-        this.onerror = null;
-        this.src = '';
-        this.width = 256;
-        this.height = 256;
+        // Constructor implementation
     }
 
-    set src(value) {
+    set src(value: string) {
         this._src = value;
         // Simulate async image load
         setTimeout(() => {
@@ -55,10 +62,10 @@ global.Image = class {
         }, 0);
     }
 
-    get src() {
+    get src(): string {
         return this._src;
     }
-};
+} as any;
 
 // Mock fetch for elevation tiles
 global.fetch = jest.fn(() =>
@@ -67,7 +74,7 @@ global.fetch = jest.fn(() =>
         blob: () => Promise.resolve(new Blob()),
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(256 * 256 * 4)),
     })
-);
+) as jest.Mock;
 
 // Mock createImageBitmap
 global.createImageBitmap = jest.fn(() =>
@@ -76,22 +83,21 @@ global.createImageBitmap = jest.fn(() =>
         height: 256,
         close: jest.fn(),
     })
-);
+) as jest.Mock;
 
 // Mock AbortController
-global.AbortController = class {
-    constructor() {
-        this.signal = {
-            aborted: false,
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn(),
-        };
-    }
-    abort() {
+global.AbortController = class MockAbortController {
+    public signal = {
+        aborted: false,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+    };
+
+    abort(): void {
         this.signal.aborted = true;
     }
-};
+} as unknown as new () => AbortController;
 
 // Mock requestAnimationFrame
-global.requestAnimationFrame = jest.fn(cb => setTimeout(cb, 0));
-global.cancelAnimationFrame = jest.fn(id => clearTimeout(id));
+global.requestAnimationFrame = jest.fn((cb: () => void) => setTimeout(cb, 0)) as jest.Mock;
+global.cancelAnimationFrame = jest.fn((id: number) => clearTimeout(id)) as jest.Mock;

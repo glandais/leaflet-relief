@@ -35,21 +35,46 @@ npm install leaflet-relief
 ```
 
 ```javascript
-// ES6 import
+// ES6 import (recommended)
 import 'leaflet-relief';
 
 // CommonJS
 require('leaflet-relief');
 ```
 
+### TypeScript
+
+Full TypeScript support with accurate type definitions:
+
+```typescript
+import 'leaflet-relief';
+import * as L from 'leaflet';
+
+// Type-safe options
+const reliefOptions: L.GridLayer.ReliefOptions = {
+    mode: 'hillshade',
+    azimuth: 315,
+    elevation: 45,
+    opacity: 0.6,
+};
+
+const relief = L.gridLayer.relief(reliefOptions);
+```
+
 ### CDN
 
 ```html
-<!-- Include from jsDelivr -->
-<script src="https://cdn.jsdelivr.net/npm/leaflet-relief@latest/src/L.GridLayer.Relief.js"></script>
+<!-- Modern ES Module (recommended) -->
+<script
+    src="https://cdn.jsdelivr.net/npm/leaflet-relief@latest/dist/leaflet-relief.esm.js"
+    type="module"
+></script>
 
-<!-- Or from unpkg -->
-<script src="https://unpkg.com/leaflet-relief@latest/src/L.GridLayer.Relief.js"></script>
+<!-- UMD (browser global) -->
+<script src="https://cdn.jsdelivr.net/npm/leaflet-relief@latest/dist/leaflet-relief.umd.js"></script>
+
+<!-- Minified version -->
+<script src="https://cdn.jsdelivr.net/npm/leaflet-relief@latest/dist/leaflet-relief.min.js"></script>
 ```
 
 ### Local Download

@@ -1,10 +1,11 @@
 module.exports = {
+    preset: 'ts-jest',
     testEnvironment: 'jsdom',
     collectCoverage: true,
     coverageDirectory: 'coverage',
     coveragePathIgnorePatterns: ['/node_modules/', '/test/', '/coverage/'],
-    testMatch: ['**/test/**/*.test.js', '**/__tests__/**/*.js'],
-    setupFilesAfterEnv: ['<rootDir>/test/setup.js'],
+    testMatch: ['**/test/**/*.test.ts', '**/__tests__/**/*.test.ts'],
+    setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
     moduleNameMapper: {
         '\\.(css|less|scss|sass)$': '<rootDir>/test/__mocks__/styleMock.js',
     },
@@ -17,4 +18,9 @@ module.exports = {
             statements: 50,
         },
     },
+    collectCoverageFrom: ['src/**/*.ts', '!src/**/*.test.ts', '!src/**/*.d.ts'],
+    transform: {
+        '^.+\\.ts$': 'ts-jest',
+    },
+    moduleFileExtensions: ['ts', 'js', 'json', 'node'],
 };
