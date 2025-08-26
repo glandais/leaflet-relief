@@ -164,7 +164,7 @@
     /**
      * Default hillshade color function (grayscale)
      * @param {number} intensity - Light intensity (0-1)
-     * @returns {Array} RGB values [r, g, b]
+     * @returns {number[]} RGB values [r, g, b]
      */
     const _defaultHillshadeColorFunction = function (intensity) {
         const value = Math.round(intensity * 255);
@@ -257,7 +257,7 @@
 
     /**
      * Predefined slope color schemes
-     * @type {Object<string, Array>} Named color schemes with slope-to-hue mappings
+     * @type {Object<string, Array<{slope: {min: number, max: number}, h: {min: number, max: number}}>>} Named color schemes with slope-to-hue mappings
      */
     const _slopeColorSchemes = {
         default: _defaultSlopeColorConfig,
@@ -284,8 +284,8 @@
 
     /**
      * Create a slope color function from HSV configuration
-     * @param {Array} colorConfig - Array of slope/hue range mappings
-     * @returns {Function} Function that takes slope degrees and returns [r, g, b]
+     * @param {Array<{slope: {min: number, max: number}, h: {min: number, max: number}}>} colorConfig - Array of slope/hue range mappings
+     * @returns {Function<number, number[]>} Function that takes slope degrees and returns [r, g, b]
      */
     const _createSlopeColorFunction = function (colorConfig) {
         return function (slopeDegrees) {
@@ -318,6 +318,19 @@
      *
      * @class L.GridLayer.Relief
      * @extends L.GridLayer
+     *
+     * @property {string} mode - Rendering mode: 'hillshade' or 'slope'
+     * @property {number} azimuth - Sun azimuth angle in degrees (0-360) for hillshade
+     * @property {number} elevation - Sun elevation angle in degrees (0-90) for hillshade
+     * @property {Function} hillshadeColorFunction - Function to convert light intensity to RGB
+     * @property {Function} slopeColorFunction - Function to convert slope degrees to RGB
+     * @property {string|Function} elevationUrl - URL template or function for elevation tiles
+     * @property {Function} elevationExtractor - Function to extract elevation from RGBA data
+     * @property {Function} fillTile - Bound rendering function (hillshade or slope specific)
+     * @property {Map<string, AbortController>} abortControllers - Active tile request controllers
+     * @property {number} _hillshadeA1 - Precomputed sin(elevation) for hillshade calculations
+     * @property {number} _hillshadeA2 - Precomputed cos(elevation) * sin(azimuth) for hillshade
+     * @property {number} _hillshadeA3 - Precomputed cos(elevation) * cos(azimuth) for hillshade
      */
     L.GridLayer.Relief = L.GridLayer.extend({
         options: {
@@ -385,8 +398,12 @@
                 this.fillTile = this._fillSlopeTile.bind(this);
             }
 
-            // Track abort controllers for cancelling in-flight tile requests
-            // This prevents memory leaks when tiles are unloaded before loading completes
+            /**
+             * Map of active tile request abort controllers
+             * Key: tile key string (z/x/y), Value: AbortController instance
+             * This prevents memory leaks when tiles are unloaded before loading completes
+             * @type {Map<string, AbortController>}
+             */
             this.abortControllers = new Map();
 
             // Listen for tile unload events to clean up pending requests
@@ -491,6 +508,18 @@
         },
 
         /**
+         * Create hillshade color function for processing elevation data
+         * @private
+         * @param {number[]} zData - 3x3 elevation array from _getZ
+         * @returns {number[]} RGBA color array [r, g, b, a]
+         */
+        _createHillshadeColor: function (zData) {
+            const L = _getL(zData, this._hillshadeA1, this._hillshadeA2, this._hillshadeA3);
+            const [colorR, colorG, colorB] = this.hillshadeColorFunction(L);
+            return [colorR, colorG, colorB, 255];
+        },
+
+        /**
          * Render hillshade effect for a single map tile
          * @private
          * @param {Uint8ClampedArray} data - Canvas image data array
@@ -499,16 +528,24 @@
          * @param {AbortSignal} abortSignal - Abort signal for canceling operation
          */
         _fillHillshadeTile: function (data, tileData, _coords, abortSignal) {
-            this._fillTile(
-                data,
-                tileData,
-                zData => {
-                    const L = _getL(zData, this._hillshadeA1, this._hillshadeA2, this._hillshadeA3);
-                    const [colorR, colorG, colorB] = this.hillshadeColorFunction(L);
-                    return [colorR, colorG, colorB, 255];
-                },
-                abortSignal
-            );
+            this._fillTile(data, tileData, zData => this._createHillshadeColor(zData), abortSignal);
+        },
+
+        /**
+         * Create slope color function for processing elevation data with pixel size
+         * @private
+         * @param {number[]} zData - 3x3 elevation array from _getZ
+         * @param {number} pixelSizeMeters - Pixel size scaling factor
+         * @returns {number[]} RGBA color array [r, g, b, a]
+         */
+        _createSlopeColor: function (zData, pixelSizeMeters) {
+            const slopeDegrees = _getSlope(zData, pixelSizeMeters);
+            if (slopeDegrees < 0.5) {
+                return RGBA_EMPTY;
+            } else {
+                const slopeColor = this.slopeColorFunction(slopeDegrees);
+                return [slopeColor[0], slopeColor[1], slopeColor[2], 255];
+            }
         },
 
         /**
@@ -528,15 +565,7 @@
             this._fillTile(
                 data,
                 tileData,
-                zData => {
-                    const slopeDegrees = _getSlope(zData, pixelSizeMeters);
-                    if (slopeDegrees < 0.5) {
-                        return RGBA_EMPTY;
-                    } else {
-                        const slopeColor = this.slopeColorFunction(slopeDegrees);
-                        return [slopeColor[0], slopeColor[1], slopeColor[2], 255];
-                    }
-                },
+                zData => this._createSlopeColor(zData, pixelSizeMeters),
                 abortSignal
             );
         },

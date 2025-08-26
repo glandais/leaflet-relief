@@ -6,6 +6,9 @@ module.exports = [
     js.configs.recommended,
     prettier,
     {
+        ignores: ['node_modules/', 'coverage/', 'dist/', 'build/', '.github/', '*.min.js'],
+    },
+    {
         files: ['src/**/*.js', 'test/**/*.js', '*.js'],
         languageOptions: {
             ecmaVersion: 2021,
