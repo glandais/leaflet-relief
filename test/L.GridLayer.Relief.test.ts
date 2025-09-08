@@ -692,9 +692,10 @@ describe('L.GridLayer.Relief', () => {
 
                 const layer = L.gridLayer.relief({ mode: 'slope', slopeColorConfig: colorConfig });
                 const colorFunction = layer.options.slopeColorFunction;
+                expect(colorFunction).toBeDefined();
 
                 // Test slope below first range - should use first range h.min
-                const flatColor = colorFunction(0);
+                const flatColor = colorFunction!(0);
                 expect(flatColor).toHaveLength(3);
                 expect(flatColor).toEqual(
                     expect.arrayContaining([
@@ -705,15 +706,15 @@ describe('L.GridLayer.Relief', () => {
                 );
 
                 // Test slope in first range
-                const gentleColor = colorFunction(5);
+                const gentleColor = colorFunction!(5);
                 expect(gentleColor).toHaveLength(3);
 
                 // Test slope in second range
-                const moderateColor = colorFunction(20);
+                const moderateColor = colorFunction!(20);
                 expect(moderateColor).toHaveLength(3);
 
                 // Test slope above last range - should use last range h.max
-                const steepColor = colorFunction(50);
+                const steepColor = colorFunction!(50);
                 expect(steepColor).toHaveLength(3);
             });
 
@@ -725,15 +726,16 @@ describe('L.GridLayer.Relief', () => {
 
                 const layer = L.gridLayer.relief({ mode: 'slope', slopeColorConfig: colorConfig });
                 const colorFunction = layer.options.slopeColorFunction;
+                expect(colorFunction).toBeDefined();
 
                 // Below minimum range
-                const belowMin = colorFunction(2);
-                const atMin = colorFunction(5);
+                const belowMin = colorFunction!(2);
+                const atMin = colorFunction!(5);
                 expect(belowMin).toEqual(atMin); // Should use same color as minimum
 
                 // Above maximum range
-                const aboveMax = colorFunction(100);
-                const atMax = colorFunction(45);
+                const aboveMax = colorFunction!(100);
+                const atMax = colorFunction!(45);
                 expect(aboveMax).toEqual(atMax); // Should use same color as maximum
             });
 
@@ -744,10 +746,11 @@ describe('L.GridLayer.Relief', () => {
 
                 const layer = L.gridLayer.relief({ mode: 'slope', slopeColorConfig: colorConfig });
                 const colorFunction = layer.options.slopeColorFunction;
+                expect(colorFunction).toBeDefined();
 
-                const color1 = colorFunction(0); // Should be closer to green (h=120)
-                const color2 = colorFunction(10); // Should be in middle
-                const color3 = colorFunction(20); // Should be closer to red (h=0)
+                const color1 = colorFunction!(0); // Should be closer to green (h=120)
+                const color2 = colorFunction!(10); // Should be in middle
+                const color3 = colorFunction!(20); // Should be closer to red (h=0)
 
                 // Colors should be different as they interpolate across the range
                 expect(color1).not.toEqual(color2);
@@ -766,7 +769,7 @@ describe('L.GridLayer.Relief', () => {
                     expect(typeof colorFunction).toBe('function');
 
                     // Test that function returns valid RGB values
-                    const color = colorFunction(15);
+                    const color = colorFunction!(15);
                     expect(color).toHaveLength(3);
                     expect(color[0]).toBeGreaterThanOrEqual(0);
                     expect(color[0]).toBeLessThanOrEqual(255);
