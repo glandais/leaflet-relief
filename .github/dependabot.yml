@@ -21,14 +21,8 @@ updates:
     assignees:
       - "glandais"
     groups:
-      # Group all development dependencies together
-      dev-dependencies:
-        patterns:
-          - "@semantic-release/*"
-          - "@commitlint/*"
-          - "semantic-release"
-          - "husky"
-        dependency-type: "development"
+      # Group all minor and patch updates together
+      minor-and-patch:
         update-types:
           - "minor"
           - "patch"
