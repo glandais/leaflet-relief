@@ -1,13 +1,13 @@
-import * as d from "leaflet";
-const A = 40075017, h = 256, M = [0, 0, 0, 0], b = {
+import * as m from "leaflet";
+const z = 40075017, M = [0, 0, 0, 0], v = {
   available: [],
   idleSize: 5,
   idleTimeout: 3e4,
   // 30 seconds
   idleTimer: null,
-  acquire() {
-    let t = this.available.pop();
-    return t || (t = document.createElement("canvas"), t.width = h, t.height = h), this._resetIdleTimer(), t;
+  acquire(t) {
+    let e = this.available.pop();
+    return e || (e = document.createElement("canvas")), e.width = t, e.height = t, this._resetIdleTimer(), e;
   },
   release(t) {
     t && (this.available.push(t), this._resetIdleTimer());
@@ -19,38 +19,38 @@ const A = 40075017, h = 256, M = [0, 0, 0, 0], b = {
     for (; this.available.length > this.idleSize; )
       this.available.pop();
   }
-}, S = function(t, e, o) {
+}, C = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp", A = function(t, e, o) {
   return `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${t}/${e}/${o}.png`;
-}, v = function(t, e, o, n) {
+}, b = function(t, e, o, i) {
   return t * 256 + e + o / 256 - 32768;
-}, F = function(t, e, o, n) {
+}, R = function(t, e, o, i) {
   return -1e4 + (t * 256 * 256 + e * 256 + o) * 0.1;
-}, C = function(t, e) {
-  return (t[2] + 2 * t[5] + t[8] - (t[0] + 2 * t[3] + t[6])) / (8 * e);
 }, T = function(t, e) {
+  return (t[2] + 2 * t[5] + t[8] - (t[0] + 2 * t[3] + t[6])) / (8 * e);
+}, y = function(t, e) {
   return (t[0] + 2 * t[1] + t[2] - (t[6] + 2 * t[7] + t[8])) / (8 * e);
-}, R = function(t, e) {
-  const o = C(t, 5), n = T(t, 5);
-  let i = (e.hillshadeA1 - e.hillshadeA2 * o - e.hillshadeA3 * n) / Math.sqrt(1 + o ** 2 + n ** 2);
-  return i < 0 && (i = 0), i = Math.sqrt(i * 0.8 + 0.2), i;
-}, U = function(t) {
+}, U = function(t, e) {
+  const o = T(t, 5), i = y(t, 5);
+  let n = (e.hillshadeA1 - e.hillshadeA2 * o - e.hillshadeA3 * i) / Math.sqrt(1 + o ** 2 + i ** 2);
+  return n < 0 && (n = 0), n = Math.sqrt(n * 0.8 + 0.2), n;
+}, F = function(t) {
   const e = Math.round(t * 255);
   return [e, e, e];
-}, L = function(t, e) {
-  const o = Math.PI - 2 * Math.PI * t / Math.pow(2, e), n = Math.atan(0.5 * (Math.exp(o) - Math.exp(-o))), i = A / (h * Math.pow(2, e)), a = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, n));
-  return Math.max(0.1, i * Math.cos(a));
+}, L = function(t, e, o) {
+  const i = Math.PI - 2 * Math.PI * t / Math.pow(2, e), n = Math.atan(0.5 * (Math.exp(i) - Math.exp(-i))), a = z / (o * Math.pow(2, e)), l = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, n));
+  return Math.max(0.1, a * Math.cos(l));
 }, P = function(t, e) {
-  const o = C(t, e), n = T(t, e);
-  return Math.atan(Math.sqrt(o * o + n * n)) * 180 / Math.PI;
+  const o = T(t, e), i = y(t, e);
+  return Math.atan(Math.sqrt(o * o + i * i)) * 180 / Math.PI;
 }, _ = (t, e, o) => {
   for (; t < 0; )
     t = t + 360;
   for (; t > 360; )
     t = t - 360;
   t = t / 60;
-  const n = o * e, i = n * (1 - Math.abs(t % 2 - 1)), a = o - n;
+  const i = o * e, n = i * (1 - Math.abs(t % 2 - 1)), a = o - i;
   let l, s, r;
-  return t >= 0 && t < 1 ? [l, s, r] = [n, i, 0] : t >= 1 && t < 2 ? [l, s, r] = [i, n, 0] : t >= 2 && t < 3 ? [l, s, r] = [0, n, i] : t >= 3 && t < 4 ? [l, s, r] = [0, i, n] : t >= 4 && t < 5 ? [l, s, r] = [i, 0, n] : [l, s, r] = [n, 0, i], [Math.round((l + a) * 255), Math.round((s + a) * 255), Math.round((r + a) * 255), 255];
+  return t >= 0 && t < 1 ? [l, s, r] = [i, n, 0] : t >= 1 && t < 2 ? [l, s, r] = [n, i, 0] : t >= 2 && t < 3 ? [l, s, r] = [0, i, n] : t >= 3 && t < 4 ? [l, s, r] = [0, n, i] : t >= 4 && t < 5 ? [l, s, r] = [n, 0, i] : [l, s, r] = [i, 0, n], [Math.round((l + a) * 255), Math.round((s + a) * 255), Math.round((r + a) * 255), 255];
 }, w = [
   { slope: { min: 0, max: 3 }, h: { min: 120, max: 60 } },
   { slope: { min: 3, max: 9 }, h: { min: 60, max: 20 } },
@@ -81,26 +81,26 @@ const A = 40075017, h = 256, M = [0, 0, 0, 0], b = {
   return function(e) {
     if (e < t[0].slope.min)
       return _(t[0].h.min, 1, 1).slice(0, 3);
-    for (let n = 0; n < t.length; n++) {
-      const i = t[n];
-      if (e >= i.slope.min && e <= i.slope.max) {
-        const a = (e - i.slope.min) / (i.slope.max - i.slope.min), l = i.h.min + a * (i.h.max - i.h.min);
+    for (let i = 0; i < t.length; i++) {
+      const n = t[i];
+      if (e >= n.slope.min && e <= n.slope.max) {
+        const a = (e - n.slope.min) / (n.slope.max - n.slope.min), l = n.h.min + a * (n.h.max - n.h.min);
         return _(l, 1, 1).slice(0, 3);
       }
     }
     const o = t[t.length - 1];
     return _(o.h.max, 1, 1).slice(0, 3);
   };
-}, $ = d.GridLayer.extend({
+}, $ = m.GridLayer.extend({
   options: {
     mode: "hillshade",
-    elevationUrl: S,
-    elevationExtractor: v,
+    elevationUrl: C,
+    elevationExtractor: b,
     hillshadeAzimuth: 315,
     hillshadeElevation: 45,
-    hillshadeColorFunction: U,
+    hillshadeColorFunction: F,
     slopeColorFunction: g(w),
-    attribution: '&copy; <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank">Mapzen Elevation</a>'
+    attribution: '&copy; <a href="https://mapterhorn.com/attribution/" target="_blank">Mapterhorn</a>'
   },
   initialize: function(t) {
     if (this._state = {
@@ -114,25 +114,26 @@ const A = 40075017, h = 256, M = [0, 0, 0, 0], b = {
       const e = E[t.slopeColorScheme] || E.default;
       t.slopeColorFunction = g(e);
     }
-    d.Util.setOptions(this, t), this._recomputeHillshadeConstants(), this.on("tileunload", function(e) {
+    m.Util.setOptions(this, t), this._recomputeHillshadeConstants(), this.on("tileunload", function(e) {
       this._tileUnloaded(e.coords);
     });
   },
-  _fillTile: async function(t, e, o, n) {
-    this.options.mode === "hillshade" ? this._fillHillshadeTile(t, e, o, n) : this._fillSlopeTile(t, e, o, n);
+  _fillTile: async function(t, e, o, i) {
+    this.options.mode === "hillshade" ? this._fillHillshadeTile(t, e, o, i) : this._fillSlopeTile(t, e, o, i);
   },
   _recomputeHillshadeConstants: function() {
     const t = Math.PI / 180 * this.options.hillshadeAzimuth, e = Math.PI / 180 * this.options.hillshadeElevation;
     this._state.hillshadeA1 = Math.sin(e), this._state.hillshadeA2 = Math.cos(e) * Math.sin(t), this._state.hillshadeA3 = Math.cos(e) * Math.cos(t);
   },
   _getElevation: function(t, e, o) {
-    const n = (o * h + e) * 4, i = t[n], a = t[n + 1], l = t[n + 2], s = t[n + 3];
-    return this.options.elevationExtractor(i, a, l, s);
+    const i = this.getTileSize().x, n = (o * i + e) * 4, a = t[n], l = t[n + 1], s = t[n + 2], r = t[n + 3];
+    return this.options.elevationExtractor(a, l, s, r);
   },
   _getZ: function(t, e, o) {
-    if (e <= 0 || o <= 0 || e >= h - 1 || o >= h - 1) {
-      const n = Math.max(1, Math.min(e, h - 2)), i = Math.max(1, Math.min(o, h - 2));
-      return this._getZ(t, n, i);
+    const i = this.getTileSize().x;
+    if (e <= 0 || o <= 0 || e >= i - 1 || o >= i - 1) {
+      const n = Math.max(1, Math.min(e, i - 2)), a = Math.max(1, Math.min(o, i - 2));
+      return this._getZ(t, n, a);
     }
     return [
       this._getElevation(t, e - 1, o - 1),
@@ -146,29 +147,30 @@ const A = 40075017, h = 256, M = [0, 0, 0, 0], b = {
       this._getElevation(t, e + 1, o + 1)
     ];
   },
-  _doFillTile: function(t, e, o, n) {
-    for (let i = 0; i < h; i++) {
-      if (n && n.aborted)
+  _doFillTile: function(t, e, o, i) {
+    const n = this.getTileSize().x;
+    for (let a = 0; a < n; a++) {
+      if (i && i.aborted)
         throw new DOMException("Tile loading aborted", "AbortError");
-      for (let a = 0; a < h; a++) {
-        const l = this._getZ(e, i, a), s = l.some((x) => x <= 0);
-        let r;
-        s ? r = M : r = o(l);
-        const c = (a * h + i) * 4;
-        t[c] = r[0], t[c + 1] = r[1], t[c + 2] = r[2], t[c + 3] = r[3];
+      for (let l = 0; l < n; l++) {
+        const s = this._getZ(e, a, l), r = s.some((x) => x <= 0);
+        let h;
+        r ? h = M : h = o(s);
+        const c = (l * n + a) * 4;
+        t[c] = h[0], t[c + 1] = h[1], t[c + 2] = h[2], t[c + 3] = h[3];
       }
     }
   },
   _createHillshadeColor: function(t) {
-    const e = R(t, this._state), [o, n, i] = this.options.hillshadeColorFunction(e);
-    return [o, n, i, 255];
+    const e = U(t, this._state), [o, i, n] = this.options.hillshadeColorFunction(e);
+    return [o, i, n, 255];
   },
-  _fillHillshadeTile: function(t, e, o, n) {
+  _fillHillshadeTile: function(t, e, o, i) {
     this._doFillTile(
       t,
       e,
-      (i) => this._createHillshadeColor(i),
-      n
+      (n) => this._createHillshadeColor(n),
+      i
     );
   },
   _createSlopeColor: function(t, e) {
@@ -176,17 +178,17 @@ const A = 40075017, h = 256, M = [0, 0, 0, 0], b = {
     if (o < 0.5)
       return M;
     {
-      const n = this.options.slopeColorFunction(o);
-      return [n[0], n[1], n[2], 255];
+      const i = this.options.slopeColorFunction(o);
+      return [i[0], i[1], i[2], 255];
     }
   },
-  _fillSlopeTile: function(t, e, o, n) {
-    const i = o.y, a = o.z, l = L(i, a);
+  _fillSlopeTile: function(t, e, o, i) {
+    const n = o.y, a = o.z, l = this.getTileSize().x, s = L(n, a, l);
     this._doFillTile(
       t,
       e,
-      (s) => this._createSlopeColor(s, l),
-      n
+      (r) => this._createSlopeColor(r, s),
+      i
     );
   },
   _tileUnloaded: function(t) {
@@ -197,43 +199,53 @@ const A = 40075017, h = 256, M = [0, 0, 0, 0], b = {
     }
   },
   createTile: function(t, e) {
-    const o = t.x, n = t.y, i = t.z, a = `${i}/${o}/${n}`, l = document.createElement("canvas");
-    l.setAttribute("width", h.toString()), l.setAttribute("height", h.toString());
-    const s = l.getContext("2d");
-    if (!s)
+    const o = t.x, i = t.y, n = t.z, a = `${n}/${o}/${i}`, l = this.getTileSize().x, s = document.createElement("canvas");
+    s.setAttribute("width", l.toString()), s.setAttribute("height", l.toString());
+    const r = s.getContext("2d");
+    if (!r)
       throw new Error("Unable to get 2d context from canvas");
-    const r = s.createImageData(256, 256), c = new AbortController();
+    const h = r.createImageData(l, l), c = new AbortController();
     this._state.abortControllers.set(a, c);
-    const x = typeof this.options.elevationUrl == "function" ? this.options.elevationUrl(i, o, n) : this.options.elevationUrl.replace("{z}", i.toString()).replace("{x}", o.toString()).replace("{y}", n.toString());
+    const x = typeof this.options.elevationUrl == "function" ? this.options.elevationUrl(n, o, i) : this.options.elevationUrl.replace("{z}", n.toString()).replace("{x}", o.toString()).replace("{y}", i.toString());
     return (async () => {
-      let u = null, p = null, f = null;
+      let p = null, f = null, u = null;
       try {
-        if (p = b.acquire(), f = p.getContext("2d", { willReadFrequently: !0 }), !f)
+        if (f = v.acquire(l), u = f.getContext("2d", { willReadFrequently: !0 }), !u)
           throw new Error("Unable to get 2d context from DEM canvas");
-        const m = await fetch(x, { signal: c.signal });
-        if (!m.ok)
-          throw new Error(`Failed to fetch tile: ${m.status}`);
-        const y = await m.blob();
-        u = await createImageBitmap(y), f.drawImage(u, 0, 0);
-        const I = f.getImageData(0, 0, h, h).data;
-        await this._fillTile(r.data, I, t, c.signal), c.signal.aborted || (s.putImageData(r, 0, 0), e(void 0, l));
-      } catch (m) {
-        m instanceof Error && m.name !== "AbortError" && console.error(`Error loading tile ${a}:`, m);
+        const d = await fetch(x, { signal: c.signal });
+        if (!d.ok)
+          throw new Error(`Failed to fetch tile: ${d.status}`);
+        const S = await d.blob();
+        p = await createImageBitmap(S), u.imageSmoothingEnabled = !1, u.drawImage(p, 0, 0, l, l);
+        const I = u.getImageData(0, 0, l, l).data;
+        await this._fillTile(h.data, I, t, c.signal), c.signal.aborted || (r.putImageData(h, 0, 0), e(void 0, s));
+      } catch (d) {
+        d instanceof Error && d.name !== "AbortError" && console.error(`Error loading tile ${a}:`, d);
       } finally {
-        this._state.abortControllers.delete(a), u && u.close(), p && b.release(p);
+        this._state.abortControllers.delete(a), p && p.close(), f && v.release(f);
       }
-    })(), l;
+    })(), s;
   },
   tileUnloaded: function(t) {
     this._tileUnloaded(t);
   }
 });
-d.GridLayer.Relief = $;
-d.gridLayer.relief = function(t) {
-  return new d.GridLayer.Relief(t);
+m.GridLayer.Relief = $;
+m.gridLayer.relief = function(t) {
+  return new m.GridLayer.Relief(t);
 };
-d.GridLayer.Relief.elevationExtractors = {
-  terrarium: v,
-  mapbox: F
+m.GridLayer.Relief.elevationExtractors = {
+  terrarium: b,
+  mapbox: R,
+  mapterhorn: b
+};
+m.GridLayer.Relief.elevationUrls = {
+  terrarium: A,
+  mapterhorn: C
+};
+m.GridLayer.Relief.elevationAttributions = {
+  terrarium: '&copy; <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank">Mapzen Elevation</a>',
+  mapbox: '&copy; <a href="https://www.mapbox.com/about/maps/" target="_blank">Mapbox</a>',
+  mapterhorn: '&copy; <a href="https://mapterhorn.com/attribution/" target="_blank">Mapterhorn</a>'
 };
 //# sourceMappingURL=leaflet-relief.esm.js.map
