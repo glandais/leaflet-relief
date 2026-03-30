@@ -7,6 +7,16 @@ declare global {
                 static elevationExtractors: {
                     terrarium: ElevationExtractorFunction;
                     mapbox: ElevationExtractorFunction;
+                    mapterhorn: ElevationExtractorFunction;
+                };
+                static elevationUrls: {
+                    terrarium: ElevationUrlFunction;
+                    mapterhorn: string;
+                };
+                static elevationAttributions: {
+                    terrarium: string;
+                    mapbox: string;
+                    mapterhorn: string;
                 };
                 options: ReliefOptions;
                 _tileUnloaded(coords: L.Coords): void;

@@ -8,6 +8,16 @@ declare global {
                 static elevationExtractors: {
                     terrarium: ElevationExtractorFunction;
                     mapbox: ElevationExtractorFunction;
+                    mapterhorn: ElevationExtractorFunction;
+                };
+                static elevationUrls: {
+                    terrarium: ElevationUrlFunction;
+                    mapterhorn: string;
+                };
+                static elevationAttributions: {
+                    terrarium: string;
+                    mapbox: string;
+                    mapterhorn: string;
                 };
                 options: ReliefOptions;
                 // Private methods
@@ -101,7 +111,7 @@ interface CanvasPool {
     idleSize: number;
     idleTimeout: number;
     idleTimer: ReturnType<typeof setTimeout> | null;
-    acquire(): HTMLCanvasElement;
+    acquire(size: number): HTMLCanvasElement;
     release(canvas: HTMLCanvasElement): void;
     _resetIdleTimer(): void;
     _trim(): void;
@@ -110,7 +120,6 @@ interface CanvasPool {
 // Modern ES module - no IIFE wrapper needed
 
 const _EARTH_CIRCUMFERENCE = 40075017;
-const TILE_SIZE = 256;
 const RGBA_EMPTY: [number, number, number, number] = [0, 0, 0, 0];
 
 // ====================== CANVAS POOL MANAGEMENT ======================
@@ -121,13 +130,13 @@ const _canvasPool: CanvasPool = {
     idleTimeout: 30000, // 30 seconds
     idleTimer: null,
 
-    acquire(): HTMLCanvasElement {
+    acquire(size: number): HTMLCanvasElement {
         let canvas = this.available.pop();
         if (!canvas) {
             canvas = document.createElement('canvas');
-            canvas.width = TILE_SIZE;
-            canvas.height = TILE_SIZE;
         }
+        canvas.width = size;
+        canvas.height = size;
         this._resetIdleTimer();
         return canvas;
     },
@@ -154,6 +163,8 @@ const _canvasPool: CanvasPool = {
 };
 
 // ====================== ELEVATION SOURCE ======================
+
+const _mapterhornElevationUrl = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
 
 const _defaultElevationUrl: ElevationUrlFunction = function (
     z: number,
@@ -213,10 +224,10 @@ const _defaultHillshadeColorFunction: HillshadeColorFunction = function (
 
 // ====================== INTERNAL SLOPE FUNCTIONS ======================
 
-const _pixelSizeMeters = function (y: number, z: number): number {
+const _pixelSizeMeters = function (y: number, z: number, tileSize: number): number {
     const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
     const latitude = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-    const metersPerPixelEquator = _EARTH_CIRCUMFERENCE / (TILE_SIZE * Math.pow(2, z));
+    const metersPerPixelEquator = _EARTH_CIRCUMFERENCE / (tileSize * Math.pow(2, z));
     const clampedLatitude = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, latitude));
     return Math.max(0.1, metersPerPixelEquator * Math.cos(clampedLatitude));
 };
@@ -319,14 +330,14 @@ const _createSlopeColorFunction = function (colorConfig: SlopeColorConfig[]): Sl
 const ReliefLayerClass = L.GridLayer.extend({
     options: {
         mode: 'hillshade',
-        elevationUrl: _defaultElevationUrl,
+        elevationUrl: _mapterhornElevationUrl,
         elevationExtractor: _defaultElevationExtractor,
         hillshadeAzimuth: 315,
         hillshadeElevation: 45,
         hillshadeColorFunction: _defaultHillshadeColorFunction,
         slopeColorFunction: _createSlopeColorFunction(_defaultSlopeColorConfig),
         attribution:
-            '&copy; <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank">Mapzen Elevation</a>',
+            '&copy; <a href="https://mapterhorn.com/attribution/" target="_blank">Mapterhorn</a>',
     },
 
     initialize: function (options?: ReliefOptions) {
@@ -374,7 +385,8 @@ const ReliefLayerClass = L.GridLayer.extend({
     },
 
     _getElevation: function (tileData: Uint8ClampedArray, j: number, i: number): number {
-        const pixelIndex = (i * TILE_SIZE + j) * 4;
+        const tileSize = (this.getTileSize() as L.Point).x;
+        const pixelIndex = (i * tileSize + j) * 4;
         const r = tileData[pixelIndex];
         const g = tileData[pixelIndex + 1];
         const b = tileData[pixelIndex + 2];
@@ -383,9 +395,10 @@ const ReliefLayerClass = L.GridLayer.extend({
     },
 
     _getZ: function (tileData: Uint8ClampedArray, i: number, j: number): number[] {
-        if (i <= 0 || j <= 0 || i >= TILE_SIZE - 1 || j >= TILE_SIZE - 1) {
-            const clampedI = Math.max(1, Math.min(i, TILE_SIZE - 2));
-            const clampedJ = Math.max(1, Math.min(j, TILE_SIZE - 2));
+        const tileSize = (this.getTileSize() as L.Point).x;
+        if (i <= 0 || j <= 0 || i >= tileSize - 1 || j >= tileSize - 1) {
+            const clampedI = Math.max(1, Math.min(i, tileSize - 2));
+            const clampedJ = Math.max(1, Math.min(j, tileSize - 2));
             return this._getZ(tileData, clampedI, clampedJ);
         }
 
@@ -408,12 +421,13 @@ const ReliefLayerClass = L.GridLayer.extend({
         colorFunction: ColorFunction,
         abortSignal?: AbortSignal
     ): void {
-        for (let i = 0; i < TILE_SIZE; i++) {
+        const tileSize = (this.getTileSize() as L.Point).x;
+        for (let i = 0; i < tileSize; i++) {
             if (abortSignal && abortSignal.aborted) {
                 throw new DOMException('Tile loading aborted', 'AbortError');
             }
 
-            for (let j = 0; j < TILE_SIZE; j++) {
+            for (let j = 0; j < tileSize; j++) {
                 const zData = this._getZ(tileData, i, j);
                 const hasNoData = zData.some((v: number) => v <= 0);
 
@@ -424,7 +438,7 @@ const ReliefLayerClass = L.GridLayer.extend({
                     rgba = RGBA_EMPTY;
                 }
 
-                const pixelIndex = (j * TILE_SIZE + i) * 4;
+                const pixelIndex = (j * tileSize + i) * 4;
                 data[pixelIndex] = rgba[0];
                 data[pixelIndex + 1] = rgba[1];
                 data[pixelIndex + 2] = rgba[2];
@@ -475,7 +489,8 @@ const ReliefLayerClass = L.GridLayer.extend({
         const y = coords.y;
         const z = coords.z;
 
-        const pixelSizeMeters = _pixelSizeMeters(y, z);
+        const tileSize = (this.getTileSize() as L.Point).x;
+        const pixelSizeMeters = _pixelSizeMeters(y, z, tileSize);
 
         this._doFillTile(
             data,
@@ -502,16 +517,18 @@ const ReliefLayerClass = L.GridLayer.extend({
         const z = coords.z;
         const tileKey = `${z}/${x}/${y}`;
 
+        const tileSize = (this.getTileSize() as L.Point).x;
+
         const tile = document.createElement('canvas');
-        tile.setAttribute('width', TILE_SIZE.toString());
-        tile.setAttribute('height', TILE_SIZE.toString());
+        tile.setAttribute('width', tileSize.toString());
+        tile.setAttribute('height', tileSize.toString());
 
         const ctx = tile.getContext('2d');
         if (!ctx) {
             throw new Error('Unable to get 2d context from canvas');
         }
 
-        const imageData = ctx.createImageData(256, 256);
+        const imageData = ctx.createImageData(tileSize, tileSize);
 
         const abortController = new AbortController();
         this._state.abortControllers.set(tileKey, abortController);
@@ -530,7 +547,7 @@ const ReliefLayerClass = L.GridLayer.extend({
             let demCtx: CanvasRenderingContext2D | null = null;
 
             try {
-                demCanvas = _canvasPool.acquire();
+                demCanvas = _canvasPool.acquire(tileSize);
                 demCtx = demCanvas.getContext('2d', { willReadFrequently: true });
                 if (!demCtx) {
                     throw new Error('Unable to get 2d context from DEM canvas');
@@ -544,9 +561,10 @@ const ReliefLayerClass = L.GridLayer.extend({
                 const demBlob = await demResponse.blob();
                 demBitmap = await createImageBitmap(demBlob);
 
-                demCtx.drawImage(demBitmap, 0, 0);
+                demCtx.imageSmoothingEnabled = false;
+                demCtx.drawImage(demBitmap, 0, 0, tileSize, tileSize);
 
-                const demImageData = demCtx.getImageData(0, 0, TILE_SIZE, TILE_SIZE);
+                const demImageData = demCtx.getImageData(0, 0, tileSize, tileSize);
                 const demTileData = demImageData.data;
 
                 await this._fillTile(imageData.data, demTileData, coords, abortController.signal);
@@ -590,5 +608,19 @@ L.gridLayer.relief = function (options?: ReliefOptions): L.GridLayer.Relief {
 L.GridLayer.Relief.elevationExtractors = {
     terrarium: _defaultElevationExtractor,
     mapbox: _mapboxElevationExtractor,
+    mapterhorn: _defaultElevationExtractor,
+};
+
+L.GridLayer.Relief.elevationUrls = {
+    terrarium: _defaultElevationUrl,
+    mapterhorn: _mapterhornElevationUrl,
+};
+
+L.GridLayer.Relief.elevationAttributions = {
+    terrarium:
+        '&copy; <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank">Mapzen Elevation</a>',
+    mapbox: '&copy; <a href="https://www.mapbox.com/about/maps/" target="_blank">Mapbox</a>',
+    mapterhorn:
+        '&copy; <a href="https://mapterhorn.com/attribution/" target="_blank">Mapterhorn</a>',
 };
 // Types are already exported above - no need to re-export

@@ -188,6 +188,19 @@ const nextzenRelief = L.gridLayer.relief({
 });
 ```
 
+#### Using Mapterhorn tiles (512×512)
+
+```javascript
+// Mapterhorn terrain tiles — free, 512×512, Terrarium encoding
+const mapterhornRelief = L.gridLayer.relief({
+    mode: 'hillshade',
+    tileSize: 512,
+    elevationUrl: L.GridLayer.Relief.elevationUrls.mapterhorn,
+    elevationExtractor: L.GridLayer.Relief.elevationExtractors.mapterhorn,
+    attribution: L.GridLayer.Relief.elevationAttributions.mapterhorn,
+});
+```
+
 ### Slope Analysis Layer
 
 ```javascript
@@ -345,6 +358,22 @@ Available via `L.GridLayer.Relief.elevationExtractors`:
 
 - `terrarium` - AWS Terrarium format decoder (default)
 - `mapbox` - Mapbox Terrain-RGB format decoder
+- `mapterhorn` - Mapterhorn format decoder (same as Terrarium encoding)
+
+### Predefined Elevation URLs
+
+Available via `L.GridLayer.Relief.elevationUrls`:
+
+- `terrarium` - AWS Terrarium URL function
+- `mapterhorn` - Mapterhorn tile URL template (`https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`)
+
+### Predefined Elevation Attributions
+
+Available via `L.GridLayer.Relief.elevationAttributions` (HTML strings for Leaflet's `attribution` option):
+
+- `terrarium` - Mapzen Elevation attribution
+- `mapbox` - Mapbox attribution
+- `mapterhorn` - Mapterhorn attribution
 
 #### Constructor Options
 
@@ -416,7 +445,8 @@ Inherits all events from [`L.GridLayer`](https://leafletjs.com/reference.html#gr
 
 The plugin supports any RGB-encoded elevation tiles with configurable decoders:
 
-- **AWS Terrarium** - Default format, free to use
+- **AWS Terrarium** - Default format, free to use (256×256)
+- **Mapterhorn** - Free, no API key required (512×512 WebP, Terrarium encoding)
 - **Mapbox Terrain-RGB** - Requires Mapbox access token
 - **NextZen Terrarium** - Requires API key
 - **Custom formats** - Define your own elevation extractor function
@@ -447,6 +477,25 @@ cd leaflet-relief
 
 # Install dependencies
 npm install
+```
+
+### Running the Demo Locally
+
+```bash
+# Build and serve the demo in one command
+npm run demo
+```
+
+Then open http://localhost:3000 in your browser.
+
+For iterative development, run the build watcher and server in two terminals:
+
+```bash
+# Terminal 1: rebuild on source changes
+npm run dev
+
+# Terminal 2: serve the demo
+npx serve .
 ```
 
 ### Testing

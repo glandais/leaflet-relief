@@ -13,7 +13,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 **L.GridLayer.Relief** (`src/L.GridLayer.Relief.ts`): Main plugin class extending `L.GridLayer` (TypeScript implementation)
 
 - Self-contained single-file plugin with all functionality
-- Creates 256x256 canvas tiles for terrain visualization
+- Creates canvas tiles sized to Leaflet's `tileSize` option (default 256×256, supports 512×512 e.g. Mapterhorn)
 - Supports two modes: 'hillshade' and 'slope'
 - Manages async tile loading with abort controllers to prevent memory leaks
 - Handles tile lifecycle events (load/unload)
@@ -119,7 +119,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 **Function Organization:**
 
-- `_canvasPool` - Adaptive canvas pool (grows on demand, trims to 5 canvases when idle)
+- `_canvasPool` - Adaptive canvas pool (grows on demand, trims to 5 canvases when idle); `acquire(size)` sets canvas dimensions to the requested tile size
 - `_getElevation(tileData, j, i)` - Method for elevation extraction from RGBA data
 - `_getZ(tileData, i, j)` - Extracts 3x3 elevation grid with edge clamping for gradient calculations
 - `_defaultHillshadeColorFunction(intensity)` - Default grayscale color function for hillshade
@@ -129,6 +129,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - `_fillHillshadeTile(data, tileData, coords, abortSignal)` - Hillshade rendering
 - `_fillSlopeTile(data, tileData, coords, abortSignal)` - Slope rendering
 - Built-in elevation extractors: `_defaultElevationExtractor`, `_mapboxElevationExtractor`
+- Mapterhorn URL constant: `_mapterhornElevationUrl` (`https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`)
 
 ## Configuration Options
 
@@ -211,6 +212,10 @@ const customRelief = L.gridLayer.relief({
 
 - `L.GridLayer.Relief.elevationExtractors.terrarium` - AWS Terrarium (default)
 - `L.GridLayer.Relief.elevationExtractors.mapbox` - Mapbox Terrain-RGB
+- `L.GridLayer.Relief.elevationExtractors.mapterhorn` - Mapterhorn (same as Terrarium)
+- `L.GridLayer.Relief.elevationUrls.terrarium` - AWS Terrarium URL function
+- `L.GridLayer.Relief.elevationUrls.mapterhorn` - Mapterhorn URL template (512×512 WebP)
+- `L.GridLayer.Relief.elevationAttributions.terrarium` / `.mapbox` / `.mapterhorn` - HTML attribution strings for Leaflet's `attribution` option
 
 ## Development Commands
 

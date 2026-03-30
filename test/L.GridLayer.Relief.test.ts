@@ -252,6 +252,42 @@ describe('L.GridLayer.Relief', () => {
             const elevation = extractor(0, 0, 0, 255);
             expect(elevation).toBe(-10000); // (0*65536 + 0*256 + 0) * 0.1 - 10000 = -10000
         });
+
+        it('should have mapterhorn elevation extractor matching terrarium', () => {
+            expect(L.GridLayer.Relief.elevationExtractors.mapterhorn).toBeDefined();
+            expect(L.GridLayer.Relief.elevationExtractors.mapterhorn).toBe(
+                L.GridLayer.Relief.elevationExtractors.terrarium
+            );
+        });
+    });
+
+    describe('Elevation URLs', () => {
+        it('should have terrarium elevation URL', () => {
+            expect(L.GridLayer.Relief.elevationUrls.terrarium).toBeDefined();
+        });
+
+        it('should have mapterhorn elevation URL', () => {
+            expect(L.GridLayer.Relief.elevationUrls.mapterhorn).toBeDefined();
+            expect(L.GridLayer.Relief.elevationUrls.mapterhorn).toContain('mapterhorn.com');
+            expect(L.GridLayer.Relief.elevationUrls.mapterhorn).toContain('.webp');
+        });
+    });
+
+    describe('Elevation Attributions', () => {
+        it('should have terrarium attribution', () => {
+            expect(L.GridLayer.Relief.elevationAttributions.terrarium).toBeDefined();
+            expect(L.GridLayer.Relief.elevationAttributions.terrarium).toContain('Mapzen');
+        });
+
+        it('should have mapbox attribution', () => {
+            expect(L.GridLayer.Relief.elevationAttributions.mapbox).toBeDefined();
+            expect(L.GridLayer.Relief.elevationAttributions.mapbox).toContain('Mapbox');
+        });
+
+        it('should have mapterhorn attribution', () => {
+            expect(L.GridLayer.Relief.elevationAttributions.mapterhorn).toBeDefined();
+            expect(L.GridLayer.Relief.elevationAttributions.mapterhorn).toContain('mapterhorn.com');
+        });
     });
 
     describe('Tile Data Processing', () => {
@@ -266,6 +302,19 @@ describe('L.GridLayer.Relief', () => {
 
             const elevation = layer._getElevation(tileData, 0, 0);
             expect(elevation).toBeCloseTo(0, 1); // Should be around 0 meters
+        });
+
+        it('should get elevation from 512x512 tile data', () => {
+            const layer = L.gridLayer.relief({ tileSize: 512 });
+            const tileData = new Uint8ClampedArray(512 * 512 * 4);
+            // Set pixel at (j=1, i=0): pixelIndex = (0*512 + 1)*4 = 4
+            tileData[4] = 128; // R
+            tileData[5] = 0; // G
+            tileData[6] = 0; // B
+            tileData[7] = 255; // A
+
+            const elevation = layer._getElevation(tileData, 1, 0);
+            expect(elevation).toBeCloseTo(0, 1);
         });
     });
 
