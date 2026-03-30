@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/glandais/leaflet-relief/compare/v1.4.0...v1.5.0) (2026-03-30)
+
+
+### Features
+
+* add Mapterhorn as default elevation source with configurable tile size ([13390f9](https://github.com/glandais/leaflet-relief/commit/13390f98da57ff0f70a2ecaecb180fc1412be847))
+
 # [1.4.0](https://github.com/glandais/leaflet-relief/compare/v1.3.0...v1.4.0) (2025-08-26)
 
 

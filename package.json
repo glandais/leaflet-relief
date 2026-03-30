@@ -1,6 +1,6 @@
 {
   "name": "leaflet-relief",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "A Leaflet plugin for terrain visualization with hillshading and slope analysis using AWS Terrarium elevation data",
   "main": "dist/leaflet-relief.umd.js",
   "module": "dist/leaflet-relief.esm.js",
