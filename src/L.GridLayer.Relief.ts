@@ -544,11 +544,10 @@ const ReliefLayerClass = L.GridLayer.extend({
         (async () => {
             let demBitmap: ImageBitmap | null = null;
             let demCanvas: HTMLCanvasElement | null = null;
-            let demCtx: CanvasRenderingContext2D | null = null;
 
             try {
                 demCanvas = _canvasPool.acquire(tileSize);
-                demCtx = demCanvas.getContext('2d', { willReadFrequently: true });
+                const demCtx = demCanvas.getContext('2d', { willReadFrequently: true });
                 if (!demCtx) {
                     throw new Error('Unable to get 2d context from DEM canvas');
                 }

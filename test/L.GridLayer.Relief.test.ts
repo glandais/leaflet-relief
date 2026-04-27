@@ -1,16 +1,7 @@
 import * as L from 'leaflet';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Test setup - mocking Leaflet
 declare global {
-    namespace jest {
-        interface Global {
-            L: typeof L;
-            fetch: jest.MockedFunction<typeof fetch>;
-            createImageBitmap: jest.MockedFunction<typeof createImageBitmap>;
-            AbortController: typeof AbortController;
-        }
-    }
-
     interface Window {
         L: typeof L;
     }
@@ -18,56 +9,50 @@ declare global {
 
 // Mock the Leaflet global
 (global as any).L = {
-    GridLayer: require('leaflet').GridLayer,
+    GridLayer: L.GridLayer,
     gridLayer: {},
 };
 
 // Mock the canvas API
-HTMLCanvasElement.prototype.getContext = jest.fn(function (type: string) {
+HTMLCanvasElement.prototype.getContext = vi.fn(function (type: string) {
     if (type === '2d') {
         return {
-            putImageData: jest.fn(),
-            createImageData: jest.fn(() => ({ data: new Uint8ClampedArray(256 * 256 * 4) })),
-            drawImage: jest.fn(),
-            getImageData: jest.fn(() => ({ data: new Uint8ClampedArray(256 * 256 * 4) })),
+            putImageData: vi.fn(),
+            createImageData: vi.fn(() => ({ data: new Uint8ClampedArray(256 * 256 * 4) })),
+            drawImage: vi.fn(),
+            getImageData: vi.fn(() => ({ data: new Uint8ClampedArray(256 * 256 * 4) })),
         };
     }
     return null;
 }) as any;
 
 // Mock createImageBitmap
-global.createImageBitmap = jest.fn(() =>
+global.createImageBitmap = vi.fn(() =>
     Promise.resolve({
         width: 256,
         height: 256,
-        close: jest.fn(),
+        close: vi.fn(),
     })
 ) as any;
 
 // Mock fetch
-global.fetch = jest.fn(() =>
+global.fetch = vi.fn(() =>
     Promise.resolve({
         ok: true,
         blob: () => Promise.resolve(new Blob([new ArrayBuffer(1024)], { type: 'image/png' })),
     })
 ) as any;
 
-// Mock AbortController
-global.AbortController = class {
-    public signal = { aborted: false };
+// Note: AbortController is mocked in test/setup.ts with addEventListener support
+// (required by Vitest's test runner cancellation hooks)
 
-    abort(): void {
-        this.signal.aborted = true;
-    }
-} as any;
-
-// Load the TypeScript plugin
-require('../src/L.GridLayer.Relief');
+// Load the TypeScript plugin (side-effect import registers L.gridLayer.relief)
+import '../src/L.GridLayer.Relief';
 
 describe('L.GridLayer.Relief', () => {
     beforeEach(() => {
         // Clear mocks before each test
-        jest.clearAllMocks();
+        vi.clearAllMocks();
     });
 
     describe('Instantiation', () => {
@@ -186,7 +171,7 @@ describe('L.GridLayer.Relief', () => {
         it('should create a canvas element for tile', () => {
             const layer = L.gridLayer.relief() as any;
             const coords = { x: 0, y: 0, z: 0 } as L.Coords;
-            const done = jest.fn();
+            const done = vi.fn();
 
             const tile = layer.createTile(coords, done) as HTMLCanvasElement;
 
@@ -198,7 +183,7 @@ describe('L.GridLayer.Relief', () => {
         it('should fetch elevation data when creating tile', async () => {
             const layer = L.gridLayer.relief() as any;
             const coords = { x: 0, y: 0, z: 0 } as L.Coords;
-            const done = jest.fn();
+            const done = vi.fn();
 
             layer.createTile(coords, done);
 
@@ -214,7 +199,7 @@ describe('L.GridLayer.Relief', () => {
             const coords = { x: 0, y: 0, z: 0 } as L.Coords;
 
             // Create a tile
-            const done = jest.fn();
+            const done = vi.fn();
             layer.createTile(coords, done);
 
             // Should have abort controllers map
@@ -321,17 +306,17 @@ describe('L.GridLayer.Relief', () => {
     describe('Canvas Pool Management', () => {
         beforeEach(() => {
             // Clear timers between tests
-            jest.clearAllTimers();
+            vi.clearAllTimers();
         });
 
         afterEach(() => {
             // Clear timers after tests
-            jest.clearAllTimers();
+            vi.clearAllTimers();
         });
 
         it('should handle canvas pool operations without errors', () => {
             // Use fake timers to control the idle timeout
-            jest.useFakeTimers();
+            vi.useFakeTimers();
 
             const layer = L.gridLayer.relief() as any;
 
@@ -340,9 +325,9 @@ describe('L.GridLayer.Relief', () => {
             const coords2 = { x: 1, y: 0, z: 0 } as L.Coords;
             const coords3 = { x: 0, y: 1, z: 0 } as L.Coords;
 
-            const done1 = jest.fn();
-            const done2 = jest.fn();
-            const done3 = jest.fn();
+            const done1 = vi.fn();
+            const done2 = vi.fn();
+            const done3 = vi.fn();
 
             // Create tiles (this should acquire canvases from pool)
             const tile1 = layer.createTile(coords1, done1);
@@ -356,24 +341,24 @@ describe('L.GridLayer.Relief', () => {
 
             // Fast forward time to trigger canvas pool trimming
             // The idle timeout is 30 seconds, so advance by 35 seconds
-            jest.advanceTimersByTime(35000);
+            vi.advanceTimersByTime(35000);
 
             // Should not throw errors during pool trimming
             expect(() => {
-                jest.runAllTimers();
+                vi.runAllTimers();
             }).not.toThrow();
 
-            jest.useRealTimers();
+            vi.useRealTimers();
         });
 
         it('should manage canvas pool lifecycle correctly', () => {
-            jest.useFakeTimers();
+            vi.useFakeTimers();
 
             const layer = L.gridLayer.relief() as any;
 
             // Create a tile to initialize pool usage
             const coords = { x: 0, y: 0, z: 0 } as L.Coords;
-            const done = jest.fn();
+            const done = vi.fn();
 
             const tile = layer.createTile(coords, done);
             expect(tile).toBeInstanceOf(HTMLCanvasElement);
@@ -382,25 +367,25 @@ describe('L.GridLayer.Relief', () => {
             layer._tileUnloaded(coords);
 
             // Fast forward time to test pool trimming behavior
-            jest.advanceTimersByTime(35000);
+            vi.advanceTimersByTime(35000);
 
             // Should handle timer operations without errors
             expect(() => {
-                jest.runAllTimers();
+                vi.runAllTimers();
             }).not.toThrow();
 
-            jest.useRealTimers();
+            vi.useRealTimers();
         });
 
         it('should handle rapid tile creation and unloading', () => {
-            jest.useFakeTimers();
+            vi.useFakeTimers();
 
             const layer = L.gridLayer.relief() as any;
 
             // Create and unload multiple tiles rapidly
             for (let i = 0; i < 10; i++) {
                 const coords = { x: i, y: 0, z: 0 } as L.Coords;
-                const done = jest.fn();
+                const done = vi.fn();
 
                 const tile = layer.createTile(coords, done);
                 expect(tile).toBeInstanceOf(HTMLCanvasElement);
@@ -410,42 +395,42 @@ describe('L.GridLayer.Relief', () => {
             }
 
             // Fast forward time multiple times to test pool stability
-            jest.advanceTimersByTime(10000);
-            jest.advanceTimersByTime(20000);
-            jest.advanceTimersByTime(10000);
+            vi.advanceTimersByTime(10000);
+            vi.advanceTimersByTime(20000);
+            vi.advanceTimersByTime(10000);
 
             // Pool should remain stable
             expect(() => {
-                jest.runAllTimers();
+                vi.runAllTimers();
             }).not.toThrow();
 
-            jest.useRealTimers();
+            vi.useRealTimers();
         });
 
         it('should handle timer cleanup on repeated operations', () => {
-            jest.useFakeTimers();
+            vi.useFakeTimers();
 
             const layer = L.gridLayer.relief() as any;
 
             // Create tiles repeatedly to test timer reset behavior
             for (let i = 0; i < 5; i++) {
                 const coords = { x: i, y: 0, z: 0 } as L.Coords;
-                const done = jest.fn();
+                const done = vi.fn();
 
                 layer.createTile(coords, done);
 
                 // Advance time partially
-                jest.advanceTimersByTime(10000);
+                vi.advanceTimersByTime(10000);
             }
 
             // Final advance to trigger any pending timers
-            jest.advanceTimersByTime(30000);
+            vi.advanceTimersByTime(30000);
 
             expect(() => {
-                jest.runAllTimers();
+                vi.runAllTimers();
             }).not.toThrow();
 
-            jest.useRealTimers();
+            vi.useRealTimers();
         });
     });
 

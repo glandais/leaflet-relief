@@ -1,44 +1,44 @@
-// Setup file for Jest tests
+import { vi } from 'vitest';
 
 // Mock Canvas API with simplified types
 const createMockCanvasContext = () => ({
-    fillRect: jest.fn(),
-    clearRect: jest.fn(),
-    getImageData: jest.fn(() => ({
+    fillRect: vi.fn(),
+    clearRect: vi.fn(),
+    getImageData: vi.fn(() => ({
         data: new Uint8ClampedArray(256 * 256 * 4),
     })),
-    putImageData: jest.fn(),
-    createImageData: jest.fn(() => ({
+    putImageData: vi.fn(),
+    createImageData: vi.fn(() => ({
         data: new Uint8ClampedArray(256 * 256 * 4),
     })),
-    setTransform: jest.fn(),
-    drawImage: jest.fn(),
-    save: jest.fn(),
-    restore: jest.fn(),
-    scale: jest.fn(),
-    rotate: jest.fn(),
-    translate: jest.fn(),
-    transform: jest.fn(),
-    beginPath: jest.fn(),
-    clip: jest.fn(),
-    fill: jest.fn(),
-    stroke: jest.fn(),
-    arc: jest.fn(),
-    rect: jest.fn(),
-    closePath: jest.fn(),
-    moveTo: jest.fn(),
-    lineTo: jest.fn(),
-    fillText: jest.fn(),
-    measureText: jest.fn(() => ({ width: 0 })),
+    setTransform: vi.fn(),
+    drawImage: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    scale: vi.fn(),
+    rotate: vi.fn(),
+    translate: vi.fn(),
+    transform: vi.fn(),
+    beginPath: vi.fn(),
+    clip: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    arc: vi.fn(),
+    rect: vi.fn(),
+    closePath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    fillText: vi.fn(),
+    measureText: vi.fn(() => ({ width: 0 })),
     canvas: {
         width: 256,
         height: 256,
     },
 });
 
-global.HTMLCanvasElement.prototype.getContext = jest.fn(() =>
+global.HTMLCanvasElement.prototype.getContext = vi.fn(() =>
     createMockCanvasContext()
-) as jest.Mock;
+) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 
 // Mock Image constructor
 global.Image = class MockImage {
@@ -65,32 +65,32 @@ global.Image = class MockImage {
     get src(): string {
         return this._src;
     }
-} as any;
+} as unknown as typeof Image;
 
 // Mock fetch for elevation tiles
-global.fetch = jest.fn(() =>
+global.fetch = vi.fn(() =>
     Promise.resolve({
         ok: true,
         blob: () => Promise.resolve(new Blob()),
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(256 * 256 * 4)),
     })
-) as jest.Mock;
+) as unknown as typeof fetch;
 
 // Mock createImageBitmap
-global.createImageBitmap = jest.fn(() =>
+global.createImageBitmap = vi.fn(() =>
     Promise.resolve({
         width: 256,
         height: 256,
-        close: jest.fn(),
+        close: vi.fn(),
     })
-) as jest.Mock;
+) as unknown as typeof createImageBitmap;
 
 // Mock AbortController
 global.AbortController = class MockAbortController {
     public signal = {
         aborted: false,
-        addEventListener: jest.fn(),
-        removeEventListener: jest.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
     };
 
     abort(): void {
@@ -99,5 +99,9 @@ global.AbortController = class MockAbortController {
 } as unknown as new () => AbortController;
 
 // Mock requestAnimationFrame
-global.requestAnimationFrame = jest.fn((cb: () => void) => setTimeout(cb, 0)) as jest.Mock;
-global.cancelAnimationFrame = jest.fn((id: number) => clearTimeout(id)) as jest.Mock;
+global.requestAnimationFrame = vi.fn((cb: () => void) =>
+    setTimeout(cb, 0)
+) as unknown as typeof requestAnimationFrame;
+global.cancelAnimationFrame = vi.fn((id: number) =>
+    clearTimeout(id)
+) as unknown as typeof cancelAnimationFrame;
