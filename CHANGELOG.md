@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/glandais/leaflet-relief/compare/v1.5.0...v1.5.1) (2026-04-30)
+
+
+### Bug Fixes
+
+* ts build ([3f1311f](https://github.com/glandais/leaflet-relief/commit/3f1311fdc995f487dab69ec94725e0a61cc82539))
+
 # [1.5.0](https://github.com/glandais/leaflet-relief/compare/v1.4.0...v1.5.0) (2026-03-30)
 
 
