@@ -89,7 +89,7 @@
     "@semantic-release/github": "^12.0.0",
     "@semantic-release/npm": "^13.1.1",
     "@types/leaflet": "^1.9.20",
-    "@types/node": "^25.0.3",
+    "@types/node": "^26.0.1",
     "@typescript-eslint/eslint-plugin": "^8.59.1",
     "@typescript-eslint/parser": "^8.59.1",
     "@typescript/native-preview": "^7.0.0-dev.20260421.2",
