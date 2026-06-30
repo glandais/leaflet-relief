@@ -1,44 +1,43 @@
-# Dependabot configuration for automatic dependency updates
 version: 2
 updates:
-  # Enable version updates for npm
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "04:00"
+      time: "09:30"
+      timezone: "Europe/Paris"
     open-pull-requests-limit: 10
-    pull-request-branch-name:
-      separator: "/"
+    assignees:
+      - "glandais"
     commit-message:
-      prefix: "chore"
-      prefix-development: "chore"
+      prefix: "deps(npm)"
       include: "scope"
     labels:
       - "dependencies"
-      - "npm"
-    assignees:
-      - "glandais"
     groups:
-      # Group all minor and patch updates together
       minor-and-patch:
         update-types:
           - "minor"
           - "patch"
 
-  # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "04:00"
+      time: "10:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 5
+    assignees:
+      - "glandais"
     commit-message:
-      prefix: "ci"
+      prefix: "deps(github-actions)"
       include: "scope"
     labels:
       - "dependencies"
-      - "github-actions"
-    assignees:
-      - "glandais"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
