@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Relief Plugin Demo</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 10px;
+            font-family: Arial, sans-serif;
+            box-sizing: border-box;
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        #map {
+            height: 70vh;
+            min-height: 400px;
+            max-height: 800px;
+            width: 100%;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+        }
+        
+        .controls {
+            margin: 15px 0;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 8px;
+            }
+            
+            #map {
+                height: 60vh;
+                min-height: 350px;
+                border-radius: 4px;
+                border-width: 1px;
+            }
+            
+            .controls {
+                margin: 10px 0;
+                gap: 6px;
+                justify-content: center;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            body {
+                padding: 5px;
+            }
+            
+            #map {
+                height: 55vh;
+                min-height: 300px;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+        }
+        
+        .controls button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #007cad;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+            min-width: 120px;
+            white-space: nowrap;
+        }
+        
+        .controls button:hover {
+            background: #005a82;
+        }
+        
+        .controls button.active {
+            background: #28a745;
+        }
+        
+        .controls button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .opacity-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .opacity-control label {
+            font-weight: bold;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        
+        .opacity-control input[type="range"] {
+            width: 120px;
+            min-width: 80px;
+        }
+        
+        .opacity-control input[type="checkbox"] {
+            margin: 0 8px;
+            transform: scale(1.2);
+        }
+        
+        .opacity-control select {
+            padding: 4px 8px;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            min-width: 100px;
+        }
+        
+        @media (max-width: 768px) {
+            .controls button {
+                padding: 8px 16px;
+                font-size: 13px;
+                min-width: 100px;
+            }
+            
+            .opacity-control {
+                margin-left: 0;
+                gap: 6px;
+            }
+            
+            .opacity-control input[type="range"] {
+                width: 100px;
+            }
+            
+            .opacity-control label {
+                font-size: 13px;
+            }
+            
+            .opacity-control select {
+                font-size: 13px;
+                min-width: 90px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .controls button {
+                padding: 10px 15px;
+                font-size: 14px;
+                min-width: auto;
+                width: 100%;
+            }
+            
+            .opacity-control {
+                width: 100%;
+                justify-content: space-between;
+                margin-left: 0;
+            }
+            
+            .opacity-control input[type="range"] {
+                flex-grow: 1;
+                max-width: 120px;
+            }
+            
+            .opacity-control select {
+                flex-grow: 1;
+                max-width: 150px;
+            }
+        }
+        
+        .info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            border-left: 4px solid #007cad;
+        }
+        
+        .info h2 {
+            margin-top: 0;
+            color: #007cad;
+            font-size: 1.4em;
+        }
+        
+        .info p {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .info ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .info li {
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+        
+        @media (max-width: 768px) {
+            .info {
+                padding: 12px;
+                margin-bottom: 12px;
+                border-radius: 4px;
+            }
+            
+            .info h2 {
+                font-size: 1.3em;
+            }
+            
+            .info ul {
+                padding-left: 18px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .info {
+                padding: 10px;
+                margin-bottom: 10px;
+            }
+            
+            .info h2 {
+                font-size: 1.2em;
+            }
+            
+            .info ul {
+                padding-left: 16px;
+            }
+            
+            .info li {
+                font-size: 14px;
+            }
+        }
+        
+        .location-select {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            min-width: 150px;
+            background: white;
+        }
+        
+        @media (max-width: 768px) {
+            .location-select {
+                font-size: 13px;
+                min-width: 130px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .location-select {
+                width: 100%;
+                min-width: auto;
+                margin-top: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h2>Leaflet Relief Plugin Demo</h2>
+        <p>This demo showcases the Leaflet Relief plugin with both hillshade and slope visualization modes.
+           The plugin uses <a href="https://mapterhorn.com/" target="_blank" style="color: #007cad;">Mapterhorn</a> elevation tiles (512×512 WebP) to create terrain visualizations.
+           <a href="https://github.com/glandais/leaflet-relief" target="_blank" style="color: #007cad; text-decoration: none; font-weight: bold;">View on GitHub →</a></p>
+        <ul>
+            <li><strong>Hillshade Mode:</strong> Simulates sunlight on terrain to show relief</li>
+            <li><strong>Slope Mode:</strong> Colors terrain by steepness (green = flat, red = steep)</li>
+            <li><strong>Interactive Controls:</strong> Adjust sun azimuth and elevation in real-time</li>
+            <li><strong>Hillshade Colors:</strong> Choose from grayscale, sepia, blue-tinted, green-tinted, or warm color schemes</li>
+            <li><strong>Slope Colors:</strong> Choose from default, glacial, thermal, or earth color schemes for slope visualization</li>
+        </ul>
+    </div>
+    
+    <div class="controls">
+        <button id="hillshadeBtn" class="active">Hillshade Mode</button>
+        <button id="slopeBtn">Slope Mode</button>
+        <button id="toggleBtn">Hide Relief</button>
+        
+        <div class="opacity-control">
+            <label for="opacitySlider">Opacity:</label>
+            <input type="range" id="opacitySlider" min="0" max="100" value="60">
+            <span id="opacityValue">60%</span>
+        </div>
+        
+        <div class="opacity-control" id="hillshadeControls" style="display: flex;">
+            <label for="azimuthSlider">Azimuth:</label>
+            <input type="range" id="azimuthSlider" min="0" max="360" value="315">
+            <span id="azimuthValue">315°</span>
+            
+            <label for="elevationSlider">Elevation:</label>
+            <input type="range" id="elevationSlider" min="0" max="90" value="45">
+            <span id="elevationValue">45°</span>
+            
+            <label for="colorSchemeSelect">Color:</label>
+            <select id="colorSchemeSelect">
+                <option value="grayscale">Grayscale</option>
+                <option value="sepia">Sepia</option>
+                <option value="blue">Blue Tinted</option>
+                <option value="green">Green Tinted</option>
+                <option value="warm">Warm</option>
+            </select>
+        </div>
+        
+        <div class="opacity-control" id="slopeControls" style="display: none;">
+            <label for="slopeColorSelect">Color Scheme:</label>
+            <select id="slopeColorSelect">
+                <option value="default">Default (Green→Red)</option>
+                <option value="glacial">Glacial (Blue→Red)</option>
+                <option value="thermal">Thermal (Purple→Yellow)</option>
+                <option value="earth">Earth (Green→Brown)</option>
+            </select>
+        </div>
+    </div>
+    
+    <div id="map"></div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Relief Plugin (UMD build) -->
+    <script src="dist/leaflet-relief.umd.js"></script>
+    
+    <script>
+
+        // Color scheme functions for hillshade
+        const colorSchemes = {
+            grayscale: function(intensity) {
+                const value = Math.round(intensity * 255);
+                return [value, value, value];
+            },
+            sepia: function(intensity) {
+                return [
+                    Math.round(intensity * 255),  // Red
+                    Math.round(intensity * 240),  // Green
+                    Math.round(intensity * 200)   // Blue
+                ];
+            },
+            blue: function(intensity) {
+                return [
+                    Math.round(intensity * 200),  // Red
+                    Math.round(intensity * 220),  // Green
+                    Math.round(intensity * 255)   // Blue
+                ];
+            },
+            green: function(intensity) {
+                return [
+                    Math.round(intensity * 180),  // Red
+                    Math.round(intensity * 255),  // Green
+                    Math.round(intensity * 200)   // Blue
+                ];
+            },
+            warm: function(intensity) {
+                return [
+                    Math.round(intensity * 255),  // Red
+                    Math.round(intensity * 200),  // Green
+                    Math.round(intensity * 150)   // Blue
+                ];
+            }
+        };
+
+        // Initialize the map centered on Mont Blanc, France (good terrain example)
+        const map = L.map('map').setView([45.8326, 6.8652], 12);
+        
+        // Add OpenStreetMap base layer
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+            attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+        
+        // Get control elements
+        const hillshadeBtn = document.getElementById('hillshadeBtn');
+        const slopeBtn = document.getElementById('slopeBtn');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const opacitySlider = document.getElementById('opacitySlider');
+        const opacityValue = document.getElementById('opacityValue');
+        const azimuthSlider = document.getElementById('azimuthSlider');
+        const azimuthValue = document.getElementById('azimuthValue');
+        const elevationSlider = document.getElementById('elevationSlider');
+        const elevationValue = document.getElementById('elevationValue');
+        const colorSchemeSelect = document.getElementById('colorSchemeSelect');
+        const slopeColorSelect = document.getElementById('slopeColorSelect');
+        const hillshadeControls = document.getElementById('hillshadeControls');
+        const slopeControls = document.getElementById('slopeControls');
+        
+        let reliefVisible = true;
+        let reliefLayer = undefined;
+        let mode = 'hillshade';
+        updateLayer();
+
+        function updateLayer() {
+            if (reliefVisible) {
+                if (reliefLayer) {
+                    map.removeLayer(reliefLayer);
+                }
+                reliefLayer = L.gridLayer.relief({
+                    mode: mode,
+                    hillshadeAzimuth: parseInt(azimuthSlider.value),
+                    hillshadeElevation: parseInt(elevationSlider.value),
+                    hillshadeColorFunction: colorSchemes[colorSchemeSelect.value],
+                    slopeColorScheme: slopeColorSelect.value,
+                    opacity: opacitySlider.value / 100,
+                    zIndex: 100
+                });
+                reliefLayer.addTo(map);
+            } else {
+                if (reliefLayer) {
+                    map.removeLayer(reliefLayer);
+                    reliefLayer = undefined;
+                }
+            }
+        }
+
+        // Button event handlers
+        hillshadeBtn.addEventListener('click', () => {
+            mode = 'hillshade';
+            updateLayer();
+            
+            hillshadeBtn.classList.add('active');
+            slopeBtn.classList.remove('active');
+            hillshadeControls.style.display = 'flex';
+            slopeControls.style.display = 'none';
+        });
+        
+        slopeBtn.addEventListener('click', () => {
+            mode = 'slope';
+            updateLayer();
+            
+            slopeBtn.classList.add('active');
+            hillshadeBtn.classList.remove('active');
+            hillshadeControls.style.display = 'none';
+            slopeControls.style.display = 'flex';
+        });
+        
+        toggleBtn.addEventListener('click', () => {
+            if (reliefVisible) {
+                toggleBtn.textContent = 'Show Relief';
+                reliefVisible = false;
+            } else {
+                toggleBtn.textContent = 'Hide Relief';
+                reliefVisible = true;
+            }
+            updateLayer();
+        });
+        
+        // Opacity control
+        opacitySlider.addEventListener('input', (e) => {
+            const opacity = e.target.value / 100;
+            opacityValue.textContent = e.target.value + '%';
+            updateLayer();
+        });
+
+        // Azimuth control
+        azimuthSlider.addEventListener('input', (e) => {
+            const azimuth = parseInt(e.target.value);
+            azimuthValue.textContent = azimuth + '°';
+            updateLayer();
+        });
+        
+        // Elevation control
+        elevationSlider.addEventListener('input', (e) => {
+            const elevation = parseInt(e.target.value);
+            elevationValue.textContent = elevation + '°';
+            updateLayer();
+        });
+        
+        // Color scheme control
+        colorSchemeSelect.addEventListener('change', (e) => {
+            updateLayer();
+        });
+        
+        // Slope color scheme control
+        slopeColorSelect.addEventListener('change', (e) => {
+            updateLayer();
+        });
+        
+        // Add some location presets for easy navigation
+        const locations = [
+            { name: 'Mont Blanc, Chamonix', coords: [45.8326, 6.8652], zoom: 12 },
+            { name: 'Cirque de Gavarnie, Pyrénées', coords: [42.7316, -0.0066], zoom: 13 },
+            { name: 'Mont Ventoux, Provence', coords: [44.1712, 5.2786], zoom: 12 },
+            { name: 'Pic du Midi, Pyrénées', coords: [42.9367, 0.1417], zoom: 13 }
+        ];
+        
+        // Add location selector
+        const locationSelect = document.createElement('select');
+        locationSelect.className = 'location-select';
+        
+        // Add default option
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Choose a location...';
+        locationSelect.appendChild(defaultOption);
+        
+        // Add location options
+        locations.forEach(location => {
+            const option = document.createElement('option');
+            option.value = JSON.stringify(location);
+            option.textContent = location.name;
+            locationSelect.appendChild(option);
+        });
+        
+        locationSelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                const location = JSON.parse(e.target.value);
+                map.setView(location.coords, location.zoom);
+            }
+        });
+        
+        document.querySelector('.controls').appendChild(locationSelect);
+    </script>
+</body>
+</html>
