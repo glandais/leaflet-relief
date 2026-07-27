@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "vite build && npm run build:types",
-    "build:types": "node ./node_modules/@typescript/native/bin/tsc -p tsconfig.build.json",
+    "build:types": "tsc -p tsconfig.build.json",
     "dev": "vite build --watch",
     "demo": "npm run build && serve .",
     "test": "vitest run",
@@ -27,11 +27,11 @@
     "test:visual": "playwright test visual.spec.ts",
     "test:visual:update": "playwright test visual.spec.ts --update-snapshots",
     "test:visual:headed": "playwright test visual.spec.ts --headed",
-    "lint": "eslint src/ test/ e2e/ --ext .ts",
-    "lint:fix": "eslint src/ test/ e2e/ --ext .ts --fix",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"e2e/**/*.ts\" \"*.js\" \"*.md\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"e2e/**/*.ts\" \"*.js\" \"*.md\"",
-    "typecheck": "node ./node_modules/@typescript/native/bin/tsc --noEmit",
+    "lint": "oxlint src/ test/ e2e/",
+    "lint:fix": "oxlint src/ test/ e2e/ --fix",
+    "format": "oxfmt --write \"src/**/*.ts\" \"test/**/*.ts\" \"e2e/**/*.ts\" \"*.js\" \"*.md\"",
+    "format:check": "oxfmt --check \"src/**/*.ts\" \"test/**/*.ts\" \"e2e/**/*.ts\" \"*.js\" \"*.md\"",
+    "typecheck": "tsc --noEmit",
     "semantic-release": "semantic-release",
     "prepare": "husky",
     "prepublishOnly": "npm run build"
@@ -71,17 +71,16 @@
   },
   "lint-staged": {
     "*.{ts,js}": [
-      "eslint --fix",
-      "prettier --write"
+      "oxlint --fix",
+      "oxfmt --write"
     ],
     "*.md": [
-      "prettier --write"
+      "oxfmt --write"
     ]
   },
   "devDependencies": {
     "@commitlint/cli": "^21.0.0",
     "@commitlint/config-conventional": "^21.0.0",
-    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.55.0",
     "@semantic-release/changelog": "^7.0.0",
     "@semantic-release/exec": "^7.1.0",
@@ -90,24 +89,17 @@
     "@semantic-release/npm": "^13.1.1",
     "@types/leaflet": "^1.9.20",
     "@types/node": "^26.0.1",
-    "@typescript-eslint/eslint-plugin": "^8.59.1",
-    "@typescript-eslint/parser": "^8.59.1",
     "@vitest/coverage-v8": "^4.1.5",
     "canvas": "^3.2.0",
-    "eslint": "^10.2.1",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-import-resolver-typescript": "^4.4.4",
-    "eslint-plugin-import-x": "^4.16.2",
-    "eslint-plugin-prettier": "^5.5.4",
     "husky": "^9.1.7",
     "jsdom": "^30.0.0",
     "leaflet": "^1.9.4",
     "lint-staged": "^17.0.4",
-    "prettier": "^3.6.2",
+    "oxfmt": "^0.60.0",
+    "oxlint": "^1.75.0",
     "semantic-release": "^25.0.1",
     "serve": "^14.2.4",
-    "typescript": "^6.0.3",
-    "@typescript/native": "npm:typescript@^7.0.2",
+    "typescript": "^7.0.2",
     "vite": "^8.0.10",
     "vitest": "^4.1.5"
   }

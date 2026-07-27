@@ -1,0 +1,226 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "unicorn"
+  ],
+  "categories": {
+    "correctness": "off"
+  },
+  "env": {
+    "builtin": true
+  },
+  "ignorePatterns": [
+    "node_modules/",
+    "coverage/",
+    "dist/",
+    "build/",
+    ".github/",
+    "*.min.js"
+  ],
+  "rules": {
+    "constructor-super": "error",
+    "for-direction": "error",
+    "getter-return": "error",
+    "no-async-promise-executor": "error",
+    "no-case-declarations": "error",
+    "no-class-assign": "error",
+    "no-compare-neg-zero": "error",
+    "no-cond-assign": "error",
+    "no-const-assign": "error",
+    "no-constant-binary-expression": "error",
+    "no-constant-condition": "error",
+    "no-control-regex": "error",
+    "no-debugger": "error",
+    "no-delete-var": "error",
+    "no-dupe-class-members": "error",
+    "no-dupe-else-if": "error",
+    "no-dupe-keys": "error",
+    "no-duplicate-case": "error",
+    "no-empty": "error",
+    "no-empty-character-class": "error",
+    "no-empty-pattern": "error",
+    "no-empty-static-block": "error",
+    "no-ex-assign": "error",
+    "no-extra-boolean-cast": "error",
+    "no-fallthrough": "error",
+    "no-func-assign": "error",
+    "no-global-assign": "error",
+    "no-import-assign": "error",
+    "no-invalid-regexp": "error",
+    "no-irregular-whitespace": "error",
+    "no-loss-of-precision": "error",
+    "no-misleading-character-class": "error",
+    "no-new-native-nonconstructor": "error",
+    "no-nonoctal-decimal-escape": "error",
+    "no-obj-calls": "error",
+    "no-prototype-builtins": "error",
+    "no-redeclare": "error",
+    "no-regex-spaces": "error",
+    "no-self-assign": "error",
+    "no-setter-return": "error",
+    "no-shadow-restricted-names": "error",
+    "no-sparse-arrays": "error",
+    "no-this-before-super": "error",
+    "no-unassigned-vars": "error",
+    "no-unreachable": "error",
+    "no-unsafe-finally": "error",
+    "no-unsafe-negation": "error",
+    "no-unsafe-optional-chaining": "error",
+    "no-unused-labels": "error",
+    "no-unused-private-class-members": "error",
+    "no-unused-vars": "error",
+    "no-useless-backreference": "error",
+    "no-useless-catch": "error",
+    "no-useless-escape": "error",
+    "no-with": "error",
+    "preserve-caught-error": "error",
+    "require-yield": "error",
+    "use-isnan": "error",
+    "valid-typeof": "error"
+  },
+  "overrides": [
+    {
+      "files": [
+        "*.js"
+      ],
+      "rules": {
+        "no-unused-vars": [
+          "error",
+          {
+            "argsIgnorePattern": "^_"
+          }
+        ],
+        "no-console": "off",
+        "no-var": "error",
+        "prefer-const": "error",
+        "eqeqeq": [
+          "error",
+          "always"
+        ],
+        "curly": [
+          "error",
+          "all"
+        ]
+      },
+      "globals": {
+        "L": "readonly",
+        "module": "readonly",
+        "require": "readonly",
+        "process": "readonly",
+        "__dirname": "readonly",
+        "__filename": "readonly",
+        "global": "readonly",
+        "window": "readonly",
+        "document": "readonly",
+        "console": "readonly",
+        "fetch": "readonly",
+        "createImageBitmap": "readonly",
+        "DOMException": "readonly",
+        "AbortController": "readonly",
+        "setTimeout": "readonly",
+        "clearTimeout": "readonly",
+        "Blob": "readonly",
+        "HTMLCanvasElement": "readonly"
+      },
+      "env": {
+        "es2021": true
+      }
+    },
+    {
+      "files": [
+        "src/**/*.ts",
+        "test/**/*.ts",
+        "e2e/**/*.ts",
+        "*.ts"
+      ],
+      "rules": {
+        "no-unused-vars": [
+          "error",
+          {
+            "argsIgnorePattern": "^_"
+          }
+        ],
+        "no-console": "off",
+        "no-var": "error",
+        "prefer-const": "error",
+        "eqeqeq": [
+          "error",
+          "always"
+        ],
+        "curly": [
+          "error",
+          "all"
+        ],
+        "import/no-duplicates": "error",
+        "typescript/explicit-function-return-type": "off",
+        "typescript/no-explicit-any": "warn",
+        "typescript/no-inferrable-types": "off"
+      },
+      "globals": {
+        "L": "readonly",
+        "module": "readonly",
+        "require": "readonly",
+        "process": "readonly",
+        "__dirname": "readonly",
+        "__filename": "readonly",
+        "global": "readonly",
+        "window": "readonly",
+        "document": "readonly",
+        "console": "readonly",
+        "fetch": "readonly",
+        "createImageBitmap": "readonly",
+        "DOMException": "readonly",
+        "AbortController": "readonly",
+        "setTimeout": "readonly",
+        "clearTimeout": "readonly",
+        "Blob": "readonly",
+        "HTMLCanvasElement": "readonly",
+        "HTMLElement": "readonly",
+        "Image": "readonly",
+        "ImageBitmap": "readonly",
+        "AbortSignal": "readonly",
+        "CanvasRenderingContext2D": "readonly",
+        "requestAnimationFrame": "readonly",
+        "cancelAnimationFrame": "readonly"
+      },
+      "env": {
+        "es2021": true
+      },
+      "plugins": [
+        "typescript",
+        "import"
+      ]
+    },
+    {
+      "files": [
+        "e2e/**/*.ts"
+      ],
+      "rules": {
+        "no-unused-vars": [
+          "error",
+          {
+            "argsIgnorePattern": "^_"
+          }
+        ],
+        "no-console": "off",
+        "typescript/no-explicit-any": "off"
+      },
+      "globals": {
+        "expect": "readonly",
+        "test": "readonly",
+        "describe": "readonly",
+        "beforeEach": "readonly",
+        "afterEach": "readonly",
+        "window": "readonly",
+        "document": "readonly",
+        "console": "readonly"
+      },
+      "env": {
+        "es2021": true
+      },
+      "plugins": [
+        "typescript"
+      ]
+    }
+  ]
+}
