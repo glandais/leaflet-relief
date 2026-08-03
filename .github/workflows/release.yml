@@ -39,7 +39,7 @@ jobs:
         run: npm run test:coverage
 
       - name: Coveralls GitHub Action
-        uses: coverallsapp/github-action@v2.3.7
+        uses: coverallsapp/github-action@v2.3.8
 
       - name: Build dist files
         run: npm run build
