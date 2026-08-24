@@ -40,7 +40,10 @@ declare global {
                 ): void;
 
                 _recomputeHillshadeConstants(): void;
-                _createHillshadeColor(zData: number[]): [number, number, number, number];
+                _createHillshadeColor(
+                    zData: number[],
+                    pixelSizeMeters: number
+                ): [number, number, number, number];
                 _fillHillshadeTile(
                     data: Uint8ClampedArray,
                     tileData: Uint8ClampedArray,
@@ -81,6 +84,7 @@ export interface ReliefOptions extends L.GridLayerOptions {
     mode?: 'hillshade' | 'slope';
     hillshadeAzimuth?: number;
     hillshadeElevation?: number;
+    hillshadeExaggeration?: number;
     hillshadeColorFunction?: HillshadeColorFunction;
     slopeColorFunction?: SlopeColorFunction;
     slopeColorConfig?: SlopeColorConfig[];
@@ -200,11 +204,26 @@ const _getDzdy = function (z: number[], divider: number): number {
     return (z[0] + 2 * z[1] + z[2] - (z[6] + 2 * z[7] + z[8])) / (8 * divider);
 };
 
+// Real-world size of a DEM pixel, accounting for zoom level and Web Mercator
+// latitude distortion. Gradients must be divided by this to be zoom independent.
+const _pixelSizeMeters = function (y: number, z: number, tileSize: number): number {
+    const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
+    const latitude = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+    const metersPerPixelEquator = _EARTH_CIRCUMFERENCE / (tileSize * Math.pow(2, z));
+    const clampedLatitude = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, latitude));
+    return Math.max(0.1, metersPerPixelEquator * Math.cos(clampedLatitude));
+};
+
 // ====================== INTERNAL HILLSHADE FUNCTIONS ======================
 
-const _getL = function (z: number[], state: ReliefState): number {
-    const dzdx = _getDzdx(z, 5);
-    const dzdy = _getDzdy(z, 5);
+const _getL = function (
+    z: number[],
+    state: ReliefState,
+    pixelSizeMeters: number,
+    exaggeration: number
+): number {
+    const dzdx = _getDzdx(z, pixelSizeMeters) * exaggeration;
+    const dzdy = _getDzdy(z, pixelSizeMeters) * exaggeration;
     let L =
         (state.hillshadeA1 - state.hillshadeA2 * dzdx - state.hillshadeA3 * dzdy) /
         Math.sqrt(1 + dzdx ** 2 + dzdy ** 2);
@@ -223,14 +242,6 @@ const _defaultHillshadeColorFunction: HillshadeColorFunction = function (
 };
 
 // ====================== INTERNAL SLOPE FUNCTIONS ======================
-
-const _pixelSizeMeters = function (y: number, z: number, tileSize: number): number {
-    const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
-    const latitude = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-    const metersPerPixelEquator = _EARTH_CIRCUMFERENCE / (tileSize * Math.pow(2, z));
-    const clampedLatitude = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, latitude));
-    return Math.max(0.1, metersPerPixelEquator * Math.cos(clampedLatitude));
-};
 
 const _getSlope = function (z: number[], pixelSizeMeters: number): number {
     const dzdx = _getDzdx(z, pixelSizeMeters);
@@ -334,6 +345,7 @@ const ReliefLayerClass = L.GridLayer.extend({
         elevationExtractor: _defaultElevationExtractor,
         hillshadeAzimuth: 315,
         hillshadeElevation: 45,
+        hillshadeExaggeration: 1,
         hillshadeColorFunction: _defaultHillshadeColorFunction,
         slopeColorFunction: _createSlopeColorFunction(_defaultSlopeColorConfig),
         attribution:
@@ -447,8 +459,11 @@ const ReliefLayerClass = L.GridLayer.extend({
         }
     },
 
-    _createHillshadeColor: function (zData: number[]): [number, number, number, number] {
-        const L = _getL(zData, this._state);
+    _createHillshadeColor: function (
+        zData: number[],
+        pixelSizeMeters: number
+    ): [number, number, number, number] {
+        const L = _getL(zData, this._state, pixelSizeMeters, this.options.hillshadeExaggeration);
         const [colorR, colorG, colorB] = this.options.hillshadeColorFunction(L);
         return [colorR, colorG, colorB, 255];
     },
@@ -456,13 +471,16 @@ const ReliefLayerClass = L.GridLayer.extend({
     _fillHillshadeTile: function (
         data: Uint8ClampedArray,
         tileData: Uint8ClampedArray,
-        _coords: L.Coords,
+        coords: L.Coords,
         abortSignal?: AbortSignal
     ): void {
+        const tileSize = (this.getTileSize() as L.Point).x;
+        const pixelSizeMeters = _pixelSizeMeters(coords.y, coords.z, tileSize);
+
         this._doFillTile(
             data,
             tileData,
-            (zData: number[]) => this._createHillshadeColor(zData),
+            (zData: number[]) => this._createHillshadeColor(zData, pixelSizeMeters),
             abortSignal
         );
     },

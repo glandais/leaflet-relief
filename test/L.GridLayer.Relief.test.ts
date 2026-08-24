@@ -7,6 +7,9 @@ declare global {
     }
 }
 
+// Reference DEM pixel size in meters used by hillshade unit tests
+const PIXEL_SIZE_METERS = 5;
+
 // Mock the Leaflet global
 (global as any).L = {
     GridLayer: L.GridLayer,
@@ -825,7 +828,7 @@ describe('L.GridLayer.Relief', () => {
 
                 // Test flat terrain (all elevations equal)
                 const flatTerrain = [100, 100, 100, 100, 100, 100, 100, 100, 100];
-                const flatColor = layer._createHillshadeColor(flatTerrain);
+                const flatColor = layer._createHillshadeColor(flatTerrain, PIXEL_SIZE_METERS);
 
                 expect(flatColor).toHaveLength(4);
                 expect(flatColor[3]).toBe(255); // Alpha should be 255
@@ -844,11 +847,11 @@ describe('L.GridLayer.Relief', () => {
 
                 // Flat terrain
                 const flatTerrain = [100, 100, 100, 100, 100, 100, 100, 100, 100];
-                const flatColor = layer._createHillshadeColor(flatTerrain);
+                const flatColor = layer._createHillshadeColor(flatTerrain, PIXEL_SIZE_METERS);
 
                 // Sloped terrain (northwest facing slope - should be brighter with NW sun)
                 const slopedTerrain = [50, 75, 100, 50, 75, 100, 50, 75, 100];
-                const slopedColor = layer._createHillshadeColor(slopedTerrain);
+                const slopedColor = layer._createHillshadeColor(slopedTerrain, PIXEL_SIZE_METERS);
 
                 expect(flatColor).not.toEqual(slopedColor);
                 // Both should have valid RGBA values
@@ -876,8 +879,8 @@ describe('L.GridLayer.Relief', () => {
                 // Same terrain for both
                 const terrain = [50, 75, 100, 50, 75, 100, 50, 75, 100]; // NW-facing slope
 
-                const colorNW = layerNW._createHillshadeColor(terrain);
-                const colorSE = layerSE._createHillshadeColor(terrain);
+                const colorNW = layerNW._createHillshadeColor(terrain, PIXEL_SIZE_METERS);
+                const colorSE = layerSE._createHillshadeColor(terrain, PIXEL_SIZE_METERS);
 
                 // Different sun positions should produce different lighting
                 expect(colorNW).not.toEqual(colorSE);
@@ -895,7 +898,7 @@ describe('L.GridLayer.Relief', () => {
                 ];
 
                 testTerrains.forEach(terrain => {
-                    const color = layer._createHillshadeColor(terrain);
+                    const color = layer._createHillshadeColor(terrain, PIXEL_SIZE_METERS);
 
                     // All color values should be valid
                     expect(color[0]).toBeGreaterThanOrEqual(0);
@@ -923,13 +926,120 @@ describe('L.GridLayer.Relief', () => {
                 });
 
                 const terrain = [100, 100, 100, 100, 100, 100, 100, 100, 100];
-                const color = layer._createHillshadeColor(terrain);
+                const color = layer._createHillshadeColor(terrain, PIXEL_SIZE_METERS);
 
                 // Should have red tint (R >= G and R >= B for non-zero intensities)
                 if (color[0] > 0) {
                     expect(color[0]).toBeGreaterThanOrEqual(color[1]);
                     expect(color[0]).toBeGreaterThanOrEqual(color[2]);
                 }
+            });
+        });
+
+        describe('hillshade zoom independence', () => {
+            // Build a 3x3 elevation window for a constant physical slope (rise/run),
+            // sampled at a DEM resolution of `pixelSizeMeters` per pixel.
+            const terrainForResolution = (grade: number, pixelSizeMeters: number): number[] => {
+                const step = grade * pixelSizeMeters;
+                return [0, 1, 2, 0, 1, 2, 0, 1, 2].map(column => 1000 + column * step);
+            };
+
+            it('should shade identical physical slopes identically across zoom levels', () => {
+                const layer = L.gridLayer.relief({ mode: 'hillshade' });
+
+                const coarse = 40; // ~zoom 11 at the equator with 256px tiles
+                const fine = 2.5; // ~zoom 15 at the equator with 256px tiles
+
+                const coarseColor = layer._createHillshadeColor(
+                    terrainForResolution(0.3, coarse),
+                    coarse
+                );
+                const fineColor = layer._createHillshadeColor(
+                    terrainForResolution(0.3, fine),
+                    fine
+                );
+
+                expect(fineColor).toEqual(coarseColor);
+            });
+
+            it('should not fade towards flat shading as the pixel size shrinks', () => {
+                const layer = L.gridLayer.relief({ mode: 'hillshade' });
+
+                const flatTerrain = [100, 100, 100, 100, 100, 100, 100, 100, 100];
+                const flatColor = layer._createHillshadeColor(flatTerrain, 1);
+
+                // A 30% slope must stay clearly distinct from flat terrain at every zoom
+                [40, 20, 10, 5, 2.5, 1.2].forEach(pixelSizeMeters => {
+                    const color = layer._createHillshadeColor(
+                        terrainForResolution(0.3, pixelSizeMeters),
+                        pixelSizeMeters
+                    );
+                    expect(Math.abs(color[0] - flatColor[0])).toBeGreaterThan(10);
+                });
+            });
+
+            it('should scale hillshade gradients by tile zoom level', () => {
+                const layer = L.gridLayer.relief({ mode: 'hillshade' });
+
+                const outputLowZoom = new Uint8ClampedArray(256 * 256 * 4);
+                const outputHighZoom = new Uint8ClampedArray(256 * 256 * 4);
+                const tileData = new Uint8ClampedArray(256 * 256 * 4);
+
+                for (let i = 0; i < 256; i++) {
+                    for (let j = 0; j < 256; j++) {
+                        const idx = (i * 256 + j) * 4;
+                        const encoded = Math.floor(500 + i * 2 + 32768);
+                        tileData[idx] = Math.floor(encoded / 256);
+                        tileData[idx + 1] = encoded % 256;
+                        tileData[idx + 2] = 0;
+                        tileData[idx + 3] = 255;
+                    }
+                }
+
+                layer._fillHillshadeTile(outputLowZoom, tileData, {
+                    x: 100,
+                    y: 50,
+                    z: 8,
+                } as L.Coords);
+                layer._fillHillshadeTile(outputHighZoom, tileData, {
+                    x: 100,
+                    y: 50,
+                    z: 15,
+                } as L.Coords);
+
+                // Identical DEM samples cover far less ground at z15, so the same
+                // elevation deltas describe a much steeper slope and shade differently.
+                expect(Array.from(outputHighZoom)).not.toEqual(Array.from(outputLowZoom));
+            });
+
+            it('should default hillshadeExaggeration to 1 and accept overrides', () => {
+                const layer = L.gridLayer.relief({ mode: 'hillshade' });
+                expect(layer.options.hillshadeExaggeration).toBe(1);
+
+                const exaggerated = L.gridLayer.relief({
+                    mode: 'hillshade',
+                    hillshadeExaggeration: 2,
+                });
+                expect(exaggerated.options.hillshadeExaggeration).toBe(2);
+
+                const terrain = terrainForResolution(0.1, 10);
+                expect(exaggerated._createHillshadeColor(terrain, 10)).not.toEqual(
+                    layer._createHillshadeColor(terrain, 10)
+                );
+            });
+
+            it('should behave like flat terrain when exaggeration is zero', () => {
+                const layer = L.gridLayer.relief({
+                    mode: 'hillshade',
+                    hillshadeExaggeration: 0,
+                });
+
+                const flatTerrain = [100, 100, 100, 100, 100, 100, 100, 100, 100];
+                const steepTerrain = terrainForResolution(1, 10);
+
+                expect(layer._createHillshadeColor(steepTerrain, 10)).toEqual(
+                    layer._createHillshadeColor(flatTerrain, 10)
+                );
             });
         });
 

@@ -29,7 +29,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 **Rendering Modes** (internal functions):
 
-- **Hillshade** (`_fillHillshadeTile`): Simulates sunlight on terrain using surface normals and dot product calculations with sun position set at initialization
+- **Hillshade** (`_fillHillshadeTile`): Simulates sunlight on terrain using surface normals and dot product calculations with sun position set at initialization. Gradients are scaled by real-world meters-per-pixel (`_pixelSizeMeters`, zoom + latitude aware) so shading is zoom independent, with an optional `hillshadeExaggeration` zFactor
 - **Slope** (`_fillSlopeTile`): Colors terrain by steepness using Horn's method for gradient calculation and HSV-to-RGB color mapping (green=flat, red=steep)
 
 ### Data Flow
@@ -47,7 +47,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 ### Key Algorithms
 
-**Hillshading**: Uses surface normal vectors and sun direction dot product with gamma correction and ambient lighting. Default sun position: 315° azimuth (northwest), 45° elevation. Configurable at initialization via options.
+**Hillshading**: Uses surface normal vectors and sun direction dot product with gamma correction and ambient lighting. Elevation gradients are divided by the real-world pixel size (same latitude-corrected scaling as slope mode) and multiplied by `hillshadeExaggeration`, keeping intensity consistent across zoom levels. Default sun position: 315° azimuth (northwest), 45° elevation. Configurable at initialization via options.
 
 **Slope Calculation**: Horn's method with 8-neighbor kernel, latitude-corrected pixel scaling, and configurable color schemes. Default: green→red gradient. HSV-based presets provide smooth transitions with automatic edge case handling (out-of-bounds slopes use first/last range colors). Edge pixels are clamped to valid tile boundaries for accurate gradient computation.
 
@@ -122,6 +122,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - `_canvasPool` - Adaptive canvas pool (grows on demand, trims to 5 canvases when idle); `acquire(size)` sets canvas dimensions to the requested tile size
 - `_getElevation(tileData, j, i)` - Method for elevation extraction from RGBA data
 - `_getZ(tileData, i, j)` - Extracts 3x3 elevation grid with edge clamping for gradient calculations
+- `_pixelSizeMeters(y, z, tileSize)` - Real-world size of a DEM pixel (zoom + latitude corrected), shared by hillshade and slope modes
 - `_defaultHillshadeColorFunction(intensity)` - Default grayscale color function for hillshade
 - `_createSlopeColorFunction(colorConfig)` - Generate slope color function from HSV config with edge case handling
 - `_defaultSlopeColorConfig` - Default green→red slope color scheme
@@ -140,6 +141,7 @@ const reliefLayer = L.gridLayer.relief({
     mode: 'hillshade', // 'hillshade' or 'slope'
     hillshadeAzimuth: 315, // Sun azimuth (0-360°) for hillshade
     hillshadeElevation: 45, // Sun elevation (0-90°) for hillshade
+    hillshadeExaggeration: 1, // Vertical exaggeration (zFactor), 0 disables shading
     hillshadeColorFunction: function (intensity) {
         // Custom color function (optional, defaults to grayscale)
         const value = Math.round(intensity * 255);
