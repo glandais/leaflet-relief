@@ -1,3 +1,10 @@
+## [1.5.4](https://github.com/glandais/leaflet-relief/compare/v1.5.3...v1.5.4) (2026-08-25)
+
+
+### Bug Fixes
+
+* **zoom:** stop dropping relief tiles above the source max zoom ([#98](https://github.com/glandais/leaflet-relief/issues/98)) ([37c4d10](https://github.com/glandais/leaflet-relief/commit/37c4d10d337133839b1488b0c6d6de342415187e))
+
 ## [1.5.3](https://github.com/glandais/leaflet-relief/compare/v1.5.2...v1.5.3) (2026-08-25)
 
 
