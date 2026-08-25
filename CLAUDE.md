@@ -137,6 +137,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - `_fillSlopeTile(data, tileData, coords, abortSignal)` - Slope rendering
 - Built-in elevation extractors: `_defaultElevationExtractor`, `_mapboxElevationExtractor`
 - Mapterhorn URL constant: `_mapterhornElevationUrl` (`https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`)
+- `_elevationMaxNativeZooms` - Deepest zoom published by each source (terrarium 15, mapbox 15, mapterhorn 17); drives the default `maxNativeZoom` so Leaflet upscales instead of requesting missing tiles
 
 ## Configuration Options
 
@@ -224,6 +225,7 @@ const customRelief = L.gridLayer.relief({
 - `L.GridLayer.Relief.elevationUrls.terrarium` - AWS Terrarium URL function
 - `L.GridLayer.Relief.elevationUrls.mapterhorn` - Mapterhorn URL template (512×512 WebP)
 - `L.GridLayer.Relief.elevationAttributions.terrarium` / `.mapbox` / `.mapterhorn` - HTML attribution strings for Leaflet's `attribution` option
+- `L.GridLayer.Relief.elevationMaxNativeZooms.terrarium` / `.mapbox` / `.mapterhorn` - Deepest native zoom per source (15 / 15 / 17)
 
 ## Development Commands
 

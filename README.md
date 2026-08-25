@@ -388,6 +388,28 @@ Available via `L.GridLayer.Relief.elevationAttributions` (HTML strings for Leafl
 - `mapbox` - Mapbox attribution
 - `mapterhorn` - Mapterhorn attribution
 
+### Max Native Zoom
+
+Elevation sources only publish tiles up to a given zoom level; beyond it, requests return
+`404` and no relief is rendered. The layer therefore sets a default `maxNativeZoom`, so
+Leaflet upscales the deepest available tile instead of asking for a level that does not exist.
+
+Available via `L.GridLayer.Relief.elevationMaxNativeZooms`:
+
+- `terrarium` - `15`
+- `mapbox` - `15`
+- `mapterhorn` - `17` (default, matching the default elevation source)
+
+Coverage is not uniform: some areas stop earlier than the source maximum. Override the option
+when using another provider:
+
+```javascript
+const relief = L.gridLayer.relief({
+    elevationUrl: 'https://example.com/tiles/{z}/{x}/{y}.png',
+    maxNativeZoom: 13,
+});
+```
+
 #### Constructor Options
 
 Inherits all options from [`L.GridLayer`](https://leafletjs.com/reference.html#gridlayer) plus the following relief-specific options:
@@ -404,6 +426,7 @@ Inherits all options from [`L.GridLayer`](https://leafletjs.com/reference.html#g
 | `slopeColorFunction`     | `Function`        | Default green→red | Custom color function for slope mode `function(slopeDegrees)` returns `[r, g, b]`    |
 | `elevationUrl`           | `String/Function` | AWS Terrarium     | Custom elevation tile URL pattern or function                                        |
 | `elevationExtractor`     | `Function`        | Terrarium decoder | Custom function to extract elevation from RGBA values                                |
+| `maxNativeZoom`          | `Number`          | `17`              | Deepest zoom the elevation source provides; deeper zooms upscale the last tile       |
 
 **Note**: Slope color options are mutually exclusive (XOR): only one of `slopeColorScheme`, `slopeColorConfig`, or `slopeColorFunction` should be used.
 
