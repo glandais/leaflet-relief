@@ -37,6 +37,12 @@ declare global {
                 _fillHillshadeTile(data: Uint8ClampedArray, tileData: ElevationTileData, coords: L.Coords, abortSignal?: AbortSignal): void;
                 _createSlopeColor(zData: number[], pixelScaleMeters: number): [number, number, number, number];
                 _fillSlopeTile(data: Uint8ClampedArray, tileData: ElevationTileData, coords: L.Coords, abortSignal?: AbortSignal): void;
+                _recomputeArcheoConstants(): void;
+                _createArcheoColor(zData: number[], pixelSizeMeters: number): [number, number, number, number];
+                _fillArcheoTile(data: Uint8ClampedArray, tileData: ElevationTileData, coords: L.Coords, abortSignal?: AbortSignal): void;
+                _recomputeTricolorConstants(): void;
+                _createTricolorColor(zData: number[], pixelSizeMeters: number): [number, number, number, number];
+                _fillTricolorTile(data: Uint8ClampedArray, tileData: ElevationTileData, coords: L.Coords, abortSignal?: AbortSignal): void;
                 _state: ReliefState;
             }
         }
@@ -49,11 +55,17 @@ export interface ReliefState {
     hillshadeA1: number;
     hillshadeA2: number;
     hillshadeA3: number;
+    archeoA1: number;
+    archeoA2: number[];
+    archeoA3: number[];
+    tricolorA1: number;
+    tricolorA2: number[];
+    tricolorA3: number[];
     abortControllers: globalThis.Map<string, AbortController>;
     missingTiles: Set<string>;
 }
 export interface ReliefOptions extends L.GridLayerOptions {
-    mode?: 'hillshade' | 'slope';
+    mode?: 'hillshade' | 'slope' | 'archeo' | 'tricolor';
     hillshadeAzimuth?: number;
     hillshadeElevation?: number;
     hillshadeExaggeration?: number;
@@ -61,6 +73,17 @@ export interface ReliefOptions extends L.GridLayerOptions {
     slopeColorFunction?: SlopeColorFunction;
     slopeColorConfig?: SlopeColorConfig[];
     slopeColorScheme?: 'default' | 'glacial' | 'thermal' | 'earth';
+    archeoAzimuths?: number[];
+    archeoElevation?: number;
+    archeoExaggeration?: number;
+    archeoGlowStrength?: number;
+    archeoWarmColor?: [number, number, number];
+    archeoCoolColor?: [number, number, number];
+    archeoBaseColor?: [number, number, number];
+    archeoColorScheme?: 'default' | 'vivid' | 'subtle';
+    tricolorAzimuths?: [number, number, number];
+    tricolorElevation?: number;
+    tricolorExaggeration?: number;
     elevationUrl?: string | ElevationUrlFunction;
     elevationExtractor?: ElevationExtractorFunction;
     elevationFallbackDepth?: number;
@@ -83,6 +106,14 @@ export interface SlopeColorConfig {
 }
 export interface SlopeColorSchemes {
     [key: string]: SlopeColorConfig[];
+}
+export interface ArcheoColors {
+    warm: [number, number, number];
+    cool: [number, number, number];
+    base: [number, number, number];
+}
+export interface ArcheoColorSchemes {
+    [key: string]: ArcheoColors;
 }
 export {};
 //# sourceMappingURL=L.GridLayer.Relief.d.ts.map

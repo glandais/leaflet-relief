@@ -14,7 +14,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 - Self-contained single-file plugin with all functionality
 - Creates canvas tiles sized to Leaflet's `tileSize` option (default 256×256, supports 512×512 e.g. Mapterhorn)
-- Supports two modes: 'hillshade' and 'slope'
+- Supports four modes: 'hillshade', 'slope', 'archeo' and 'tricolor'
 - Manages async tile loading with abort controllers to prevent memory leaks
 - Handles tile lifecycle events (load/unload)
 - Sun position (azimuth/elevation) configurable at initialization for hillshade mode
@@ -31,6 +31,8 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 - **Hillshade** (`_fillHillshadeTile`): Simulates sunlight on terrain using surface normals and dot product calculations with sun position set at initialization. Gradients are scaled by real-world meters-per-pixel (`_pixelSizeMeters`, zoom + latitude aware) so shading is zoom independent, with an optional `hillshadeExaggeration` zFactor
 - **Slope** (`_fillSlopeTile`): Colors terrain by steepness using Horn's method for gradient calculation and HSV-to-RGB color mapping (green=flat, red=steep)
+- **Archeo** (`_fillArcheoTile`): Multi-directional hillshade base (negative-clamped Lambertians averaged over several azimuths, normalized so flat terrain renders at the base color) tinted warm (convex) / cool (concave) by an 8-neighbor Laplacian squashed with tanh — micro-relief "glows" while flat terrain stays neutral gray
+- **Tricolor** (`_fillTricolorTile`): Three hillshades from different azimuths (NLS defaults: 315°/15°/75°) mapped to the red, green and blue channels
 
 ### Data Flow
 
@@ -53,6 +55,10 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 **Slope Calculation**: Horn's method with 8-neighbor kernel, latitude-corrected pixel scaling, and configurable color schemes. Default: green→red gradient. HSV-based presets provide smooth transitions with automatic edge case handling (out-of-bounds slopes use first/last range colors). Edge pixels are clamped to valid tile boundaries for accurate gradient computation.
 
+**Archeo**: Averages negative-clamped Lambertians over several azimuths (default 225°/270°/315°/360° at 45°, gradients divided by `_pixelSizeMeters` and multiplied by `archeoExaggeration`) — the max(0, ·) clamp must not be simplified away, it is the nonlinearity that preserves the multi-directional effect. The average is normalized by the flat-terrain value so flat ground renders at exactly the base color and slopes darken or brighten around it. Local curvature (8-neighbor Laplacian divided by the pixel size, `tanh(glowStrength × lap)`) blends the base color toward a warm color (convex) or cool color (concave), capped at `_ARCHEO_MAX_TINT`, then multiplied by the shading. Color presets: default/vivid/subtle via `archeoColorScheme`; explicit `archeoWarmColor`/`archeoCoolColor`/`archeoBaseColor` take precedence.
+
+**Tricolor**: One Horn gradient evaluation (metric-scaled like hillshade, `tricolorExaggeration` as zFactor), three clamped Lambertians written raw to R/G/B — no ambient lift, the channels need their full dynamic range for slopes to take on a color. Defaults follow the National Library of Scotland's RVT layers (red 315°, green 15°, blue 75°) at RVT's default 35° sun elevation, so flat terrain lands on a neutral mid gray.
+
 ## Development
 
 ### File Structure
@@ -62,7 +68,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - `dist/leaflet-relief.umd.js` - UMD module format
 - `dist/leaflet-relief.esm.js` - ES module format
 - `dist/L.GridLayer.Relief.d.ts` - TypeScript type definitions
-- `index.html` - Interactive demo with controls for azimuth/elevation adjustment
+- `index.html` - Interactive demo exposing every rendering option of the four modes, plus the elevation source and fallback depth
 - `test/L.GridLayer.Relief.test.ts` - Jest unit tests for plugin functionality (TypeScript)
 - `e2e/relief.spec.ts` - Playwright functional end-to-end tests against `index.html`
 - `e2e/visual.spec.ts` + `e2e/visual.spec.ts-snapshots/` - Visual regression tests and their reference screenshots
@@ -131,13 +137,19 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - `_canvasPool` - Adaptive canvas pool (grows on demand, trims to 5 canvases when idle); `acquire(size)` sets canvas dimensions to the requested tile size
 - `_getElevation(tileData, j, i)` - Method for elevation extraction from RGBA data
 - `_getZ(tileData, i, j)` - Extracts 3x3 elevation grid with edge clamping for gradient calculations
-- `_pixelSizeMeters(y, z, tileSize)` - Real-world size of a DEM pixel (zoom + latitude corrected), shared by hillshade and slope modes
+- `_pixelSizeMeters(y, z, tileSize)` - Real-world size of a DEM pixel (zoom + latitude corrected), shared by every mode
+- `_getLambert(dzdx, dzdy, a1, a2, a3)` - Negative-clamped Lambertian intensity shared by all lighting modes
+- `_getMultiL(z, pixelSizeMeters, exaggeration, a1, a2, a3)` - Multi-azimuth average of clamped Lambertians, normalized so flat terrain returns 1 (archeo base)
+- `_getCurvature(z, pixelSizeMeters)` - 8-neighbor Laplacian divided by the pixel size, for archeo micro-relief detection
 - `_defaultHillshadeColorFunction(intensity)` - Default grayscale color function for hillshade
 - `_createSlopeColorFunction(colorConfig)` - Generate slope color function from HSV config with edge case handling
 - `_defaultSlopeColorConfig` - Default green→red slope color scheme
 - `_slopeColorSchemes` - Preset slope color schemes (default, glacial, thermal, earth)
+- `_archeoColorSchemes` - Preset archeo warm/cool/base color sets (default, vivid, subtle)
 - `_fillHillshadeTile(data, tileData, coords, abortSignal)` - Hillshade rendering
 - `_fillSlopeTile(data, tileData, coords, abortSignal)` - Slope rendering
+- `_fillArcheoTile(data, tileData, coords, abortSignal)` - Archeo rendering
+- `_fillTricolorTile(data, tileData, coords, abortSignal)` - Tricolor rendering
 - Built-in elevation extractors: `_defaultElevationExtractor`, `_mapboxElevationExtractor`
 - Mapterhorn URL constant: `_mapterhornElevationUrl` (`https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`)
 - `_elevationMaxNativeZooms` - Deepest zoom published by each source (terrarium 15, mapbox 15, mapterhorn 17); drives the default `maxNativeZoom` (via `_defaultMaxNativeZoom`, built-in URLs only) so Leaflet upscales instead of requesting missing tiles
@@ -209,6 +221,32 @@ const reliefLayer = L.gridLayer.relief({
     mode: 'hillshade',
     hillshadeAzimuth: 180, // South lighting
     hillshadeElevation: 30, // Lower sun angle
+});
+```
+
+### Archeo and Tricolor Modes
+
+```javascript
+// Archeo: multi-directional hillshade + warm/cool micro-relief tinting
+const archeo = L.gridLayer.relief({
+    mode: 'archeo',
+    archeoAzimuths: [225, 270, 315, 360], // Shading base light directions
+    archeoElevation: 45,
+    archeoExaggeration: 3, // Vertical exaggeration (zFactor) of the shading base
+    archeoGlowStrength: 15, // Tint gain per unit of local curvature
+    archeoColorScheme: 'default', // 'default', 'vivid', 'subtle'
+    // Or explicit colors (take precedence over the scheme):
+    // archeoWarmColor: [236, 150, 82],
+    // archeoCoolColor: [126, 172, 246],
+    // archeoBaseColor: [192, 191, 196],
+});
+
+// Tricolor: three hillshades in the R, G and B channels (NLS method)
+const tricolor = L.gridLayer.relief({
+    mode: 'tricolor',
+    tricolorAzimuths: [315, 15, 75], // R, G, B light azimuths
+    tricolorElevation: 35,
+    tricolorExaggeration: 1,
 });
 ```
 

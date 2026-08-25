@@ -81,6 +81,18 @@ describe('L.GridLayer.Relief', () => {
             expect(layer.options.mode).toBe('slope');
         });
 
+        it('should create a relief layer with archeo mode', () => {
+            const layer = L.gridLayer.relief({ mode: 'archeo' });
+            expect(layer).toBeDefined();
+            expect(layer.options.mode).toBe('archeo');
+        });
+
+        it('should create a relief layer with tricolor mode', () => {
+            const layer = L.gridLayer.relief({ mode: 'tricolor' });
+            expect(layer).toBeDefined();
+            expect(layer.options.mode).toBe('tricolor');
+        });
+
         it('should accept custom elevation URL', () => {
             const customUrl = 'https://example.com/{z}/{x}/{y}.png';
             const layer = L.gridLayer.relief({ elevationUrl: customUrl });
@@ -165,6 +177,66 @@ describe('L.GridLayer.Relief', () => {
         });
     });
 
+    describe('Archeo Configuration', () => {
+        it('should use default archeo options if not provided', () => {
+            const layer = L.gridLayer.relief({ mode: 'archeo' });
+            expect(layer.options.archeoAzimuths).toEqual([225, 270, 315, 360]);
+            expect(layer.options.archeoElevation).toBe(45);
+            expect(layer.options.archeoExaggeration).toBe(3);
+            expect(layer.options.archeoGlowStrength).toBe(15);
+            expect(layer.options.archeoWarmColor).toEqual([236, 150, 82]);
+            expect(layer.options.archeoCoolColor).toEqual([126, 172, 246]);
+            expect(layer.options.archeoBaseColor).toEqual([192, 191, 196]);
+        });
+
+        it('should accept custom azimuths and glow strength', () => {
+            const layer = L.gridLayer.relief({
+                mode: 'archeo',
+                archeoAzimuths: [0, 90, 180],
+                archeoGlowStrength: 5,
+            });
+            expect(layer.options.archeoAzimuths).toEqual([0, 90, 180]);
+            expect(layer.options.archeoGlowStrength).toBe(5);
+        });
+
+        it('should resolve preset archeo color scheme', () => {
+            const layer = L.gridLayer.relief({
+                mode: 'archeo',
+                archeoColorScheme: 'vivid',
+            });
+            expect(layer.options.archeoWarmColor).toEqual([246, 126, 40]);
+            expect(layer.options.archeoCoolColor).toEqual([86, 144, 250]);
+            expect(layer.options.archeoBaseColor).toEqual([198, 197, 202]);
+        });
+
+        it('should let explicit colors take precedence over a scheme', () => {
+            const layer = L.gridLayer.relief({
+                mode: 'archeo',
+                archeoColorScheme: 'vivid',
+                archeoWarmColor: [200, 100, 50],
+            });
+            expect(layer.options.archeoWarmColor).toEqual([200, 100, 50]);
+            expect(layer.options.archeoCoolColor).toEqual([86, 144, 250]);
+        });
+    });
+
+    describe('Tricolor Configuration', () => {
+        it('should use NLS default azimuths and elevation', () => {
+            const layer = L.gridLayer.relief({ mode: 'tricolor' });
+            expect(layer.options.tricolorAzimuths).toEqual([315, 15, 75]);
+            expect(layer.options.tricolorElevation).toBe(35);
+            expect(layer.options.tricolorExaggeration).toBe(1);
+        });
+
+        it('should accept custom tricolor azimuths', () => {
+            const layer = L.gridLayer.relief({
+                mode: 'tricolor',
+                tricolorAzimuths: [0, 120, 240],
+            });
+            expect(layer.options.tricolorAzimuths).toEqual([0, 120, 240]);
+        });
+    });
+
     describe('Hillshade Constants', () => {
         it('should compute hillshade constants correctly', () => {
             const layer = L.gridLayer.relief({
@@ -186,6 +258,35 @@ describe('L.GridLayer.Relief', () => {
             // Should have different values than defaults
             const defaultLayer = L.gridLayer.relief();
             expect(layer._state.hillshadeA1).not.toBe(defaultLayer._state.hillshadeA1);
+        });
+    });
+
+    describe('Archeo Constants', () => {
+        it('should compute one constant pair per azimuth', () => {
+            const layer = L.gridLayer.relief({ mode: 'archeo' });
+            expect(layer._state.archeoA2).toHaveLength(4);
+            expect(layer._state.archeoA3).toHaveLength(4);
+            expect(layer._state.archeoA1).toBeCloseTo(Math.sin(Math.PI / 4), 5);
+        });
+
+        it('should compute correct constants for azimuth 360 at elevation 45', () => {
+            const layer = L.gridLayer.relief({
+                mode: 'archeo',
+                archeoAzimuths: [360],
+                archeoElevation: 45,
+            });
+            expect(layer._state.archeoA1).toBeCloseTo(0.7071, 3);
+            expect(layer._state.archeoA2[0]).toBeCloseTo(0, 3);
+            expect(layer._state.archeoA3[0]).toBeCloseTo(0.7071, 3);
+        });
+    });
+
+    describe('Tricolor Constants', () => {
+        it('should compute one constant pair per channel', () => {
+            const layer = L.gridLayer.relief({ mode: 'tricolor' });
+            expect(layer._state.tricolorA2).toHaveLength(3);
+            expect(layer._state.tricolorA3).toHaveLength(3);
+            expect(layer._state.tricolorA1).toBeCloseTo(Math.sin((35 * Math.PI) / 180), 5);
         });
     });
 
@@ -501,6 +602,20 @@ describe('L.GridLayer.Relief', () => {
             expect(layer._fillTile).toBeDefined();
             expect(layer._fillSlopeTile).toBeDefined();
             expect(layer.options.mode).toBe('slope');
+        });
+
+        it('should have fillTile method for archeo mode', () => {
+            const layer = L.gridLayer.relief({ mode: 'archeo' });
+            expect(layer._fillTile).toBeDefined();
+            expect(layer._fillArcheoTile).toBeDefined();
+            expect(layer.options.mode).toBe('archeo');
+        });
+
+        it('should have fillTile method for tricolor mode', () => {
+            const layer = L.gridLayer.relief({ mode: 'tricolor' });
+            expect(layer._fillTile).toBeDefined();
+            expect(layer._fillTricolorTile).toBeDefined();
+            expect(layer.options.mode).toBe('tricolor');
         });
     });
 
@@ -1416,6 +1531,259 @@ describe('L.GridLayer.Relief', () => {
             // Opaque everywhere: the parent covers the whole child tile.
             expect(output[3]).toBe(255);
             expect(output[(128 * 256 + 128) * 4 + 3]).toBe(255);
+        });
+    });
+
+    describe('Archeo Rendering', () => {
+        const fillFlatTile = (tileData: Uint8ClampedArray, elevation: number) => {
+            const encoded = Math.floor(elevation + 32768);
+            for (let i = 0; i < tileData.length; i += 4) {
+                tileData[i] = Math.floor(encoded / 256);
+                tileData[i + 1] = encoded % 256;
+                tileData[i + 2] = 0;
+                tileData[i + 3] = 255;
+            }
+        };
+
+        const setElevation = (
+            tileData: Uint8ClampedArray,
+            i: number,
+            j: number,
+            elevation: number
+        ) => {
+            const encoded = Math.floor(elevation + 32768);
+            const idx = (i * 256 + j) * 4;
+            tileData[idx] = Math.floor(encoded / 256);
+            tileData[idx + 1] = encoded % 256;
+            tileData[idx + 2] = 0;
+        };
+
+        describe('_createArcheoColor', () => {
+            it('should render flat terrain as the base color', () => {
+                const layer = L.gridLayer.relief({ mode: 'archeo' });
+                const color = layer._createArcheoColor(new Array(9).fill(100), 5);
+                expect(color[3]).toBe(255);
+                // Zero gradient and zero curvature: the shading normalizes to 1 and no
+                // tint is applied, so the base color comes through untouched.
+                expect([color[0], color[1], color[2]]).toEqual(layer.options.archeoBaseColor);
+            });
+
+            it('should shade planar slopes without tinting them', () => {
+                const layer = L.gridLayer.relief({ mode: 'archeo' });
+                const flat = layer._createArcheoColor(new Array(9).fill(100), 5);
+                // Uniform planes: zero Laplacian, non-zero gradient. The lights sit in
+                // the western half, so one faces them (brighter than flat) and the other
+                // faces away (darker) - neither may pick up a tint.
+                const lit = [99, 100, 101, 99, 100, 101, 99, 100, 101];
+                const dark = [101, 100, 99, 101, 100, 99, 101, 100, 99];
+                const litColor = layer._createArcheoColor(lit, 5);
+                const darkColor = layer._createArcheoColor(dark, 5);
+                expect(darkColor[0]).toBeLessThan(flat[0]);
+                expect(litColor[0]).toBeGreaterThan(flat[0]);
+                // Same base hue ratios as flat terrain (no tint)
+                const flatRatio = flat[2] / flat[0];
+                expect(Math.abs(flatRatio - litColor[2] / litColor[0])).toBeLessThan(0.02);
+                expect(Math.abs(flatRatio - darkColor[2] / darkColor[0])).toBeLessThan(0.02);
+            });
+
+            it('should tint convex terrain warm and concave terrain cool', () => {
+                const layer = L.gridLayer.relief({ mode: 'archeo' });
+                const bump = [100, 100, 100, 100, 103, 100, 100, 100, 100];
+                const dip = [100, 100, 100, 100, 97, 100, 100, 100, 100];
+                const bumpColor = layer._createArcheoColor(bump, 5);
+                const dipColor = layer._createArcheoColor(dip, 5);
+                expect(bumpColor[0]).toBeGreaterThan(bumpColor[2]); // warm: r > b
+                expect(dipColor[2]).toBeGreaterThan(dipColor[0]); // cool: b > r
+            });
+
+            it('should tint more strongly with higher glow strength', () => {
+                const weak = L.gridLayer.relief({
+                    mode: 'archeo',
+                    archeoGlowStrength: 0.5,
+                });
+                const strong = L.gridLayer.relief({
+                    mode: 'archeo',
+                    archeoGlowStrength: 4,
+                });
+                const bump = [100, 100, 100, 100, 100.5, 100, 100, 100, 100];
+                const weakColor = weak._createArcheoColor(bump, 5);
+                const strongColor = strong._createArcheoColor(bump, 5);
+                expect(strongColor[0] - strongColor[2]).toBeGreaterThan(
+                    weakColor[0] - weakColor[2]
+                );
+            });
+
+            it('should scale curvature with the real-world pixel size', () => {
+                const layer = L.gridLayer.relief({ mode: 'archeo' });
+                const bump = [100, 100, 100, 100, 100.2, 100, 100, 100, 100];
+                // Same height anomaly spread over coarser pixels: weaker tint
+                const fine = layer._createArcheoColor(bump, 1);
+                const coarse = layer._createArcheoColor(bump, 20);
+                expect(fine[0] - fine[2]).toBeGreaterThan(coarse[0] - coarse[2]);
+            });
+
+            it('should deepen shading with archeoExaggeration', () => {
+                const plane = [101, 100, 99, 101, 100, 99, 101, 100, 99];
+                const plain = L.gridLayer.relief({
+                    mode: 'archeo',
+                    archeoExaggeration: 1,
+                });
+                const boosted = L.gridLayer.relief({
+                    mode: 'archeo',
+                    archeoExaggeration: 6,
+                });
+                expect(boosted._createArcheoColor(plane, 5)[0]).toBeLessThan(
+                    plain._createArcheoColor(plane, 5)[0]
+                );
+            });
+
+            it('should cap tint saturation on extreme curvature', () => {
+                const layer = L.gridLayer.relief({ mode: 'archeo' });
+                const spike = [100, 100, 100, 100, 1100, 100, 100, 100, 100];
+                const color = layer._createArcheoColor(spike, 5);
+                for (let i = 0; i < 3; i++) {
+                    expect(color[i]).toBeGreaterThanOrEqual(0);
+                    expect(color[i]).toBeLessThanOrEqual(255);
+                }
+                // MAX_TINT keeps a fraction of the base color: blue stays above pure warm
+                expect(color[2]).toBeGreaterThan(20);
+            });
+
+            it('should honor custom warm/cool/base colors', () => {
+                const layer = L.gridLayer.relief({
+                    mode: 'archeo',
+                    archeoWarmColor: [0, 255, 0],
+                    archeoCoolColor: [255, 0, 255],
+                    archeoBaseColor: [255, 255, 255],
+                });
+                const bump = [100, 100, 100, 100, 110, 100, 100, 100, 100];
+                const color = layer._createArcheoColor(bump, 5);
+                // Strong green tint from the custom warm color
+                expect(color[1]).toBeGreaterThan(color[0]);
+                expect(color[1]).toBeGreaterThan(color[2]);
+            });
+        });
+
+        describe('_fillArcheoTile', () => {
+            it('should fill valid terrain with opaque pixels', () => {
+                const layer = L.gridLayer.relief({ mode: 'archeo' });
+                const outputData = new Uint8ClampedArray(256 * 256 * 4);
+                const tileData = new Uint8ClampedArray(256 * 256 * 4);
+                fillFlatTile(tileData, 500);
+
+                const coords = { x: 10, y: 20, z: 8 } as L.Coords;
+                expect(() => {
+                    layer._fillArcheoTile(outputData, tileData, coords);
+                }).not.toThrow();
+
+                for (let i = 3; i < outputData.length; i += 4) {
+                    expect(outputData[i]).toBe(255);
+                }
+            });
+
+            it('should glow a central bump warm and a pit cool', () => {
+                const layer = L.gridLayer.relief({ mode: 'archeo' });
+                const coords = { x: 10, y: 20, z: 8 } as L.Coords;
+                const centerIndex = (128 * 256 + 128) * 4;
+
+                const bumpTile = new Uint8ClampedArray(256 * 256 * 4);
+                fillFlatTile(bumpTile, 500);
+                setElevation(bumpTile, 128, 128, 510);
+                const bumpOutput = new Uint8ClampedArray(256 * 256 * 4);
+                layer._fillArcheoTile(bumpOutput, bumpTile, coords);
+                expect(bumpOutput[centerIndex]).toBeGreaterThan(bumpOutput[centerIndex + 2]);
+
+                const pitTile = new Uint8ClampedArray(256 * 256 * 4);
+                fillFlatTile(pitTile, 500);
+                setElevation(pitTile, 128, 128, 490);
+                const pitOutput = new Uint8ClampedArray(256 * 256 * 4);
+                layer._fillArcheoTile(pitOutput, pitTile, coords);
+                expect(pitOutput[centerIndex + 2]).toBeGreaterThan(pitOutput[centerIndex]);
+            });
+
+            it('should render no-data areas as transparent', () => {
+                const layer = L.gridLayer.relief({ mode: 'archeo' });
+                const outputData = new Uint8ClampedArray(256 * 256 * 4);
+                const tileData = new Uint8ClampedArray(256 * 256 * 4); // all zero elevation
+                const coords = { x: 10, y: 20, z: 8 } as L.Coords;
+                layer._fillArcheoTile(outputData, tileData, coords);
+                const hasOpaquePixel = outputData.some((v, i) => i % 4 === 3 && v !== 0);
+                expect(hasOpaquePixel).toBe(false);
+            });
+
+            it('should throw AbortError when signal is aborted', () => {
+                const layer = L.gridLayer.relief({ mode: 'archeo' });
+                const outputData = new Uint8ClampedArray(256 * 256 * 4);
+                const tileData = new Uint8ClampedArray(256 * 256 * 4);
+                const coords = { x: 10, y: 20, z: 8 } as L.Coords;
+                const controller = new AbortController();
+                controller.abort();
+                expect(() => {
+                    layer._fillArcheoTile(outputData, tileData, coords, controller.signal);
+                }).toThrow();
+            });
+        });
+
+        describe('_createTricolorColor', () => {
+            it('should render flat terrain as neutral gray', () => {
+                const layer = L.gridLayer.relief({ mode: 'tricolor' });
+                const color = layer._createTricolorColor(new Array(9).fill(100), 5);
+                expect(color[3]).toBe(255);
+                expect(color[0]).toBe(color[1]);
+                expect(color[1]).toBe(color[2]);
+                // Raw Lambertian on flat ground: sin(sun elevation)
+                expect(color[0]).toBe(Math.round(255 * Math.sin((35 * Math.PI) / 180)));
+            });
+
+            it('should scale gradients with the real-world pixel size', () => {
+                const layer = L.gridLayer.relief({ mode: 'tricolor' });
+                const slope = [0, 10, 20, 10, 20, 30, 20, 30, 40];
+                // Same slope, coarser pixels: gentler in meters, so closer to neutral
+                const fine = layer._createTricolorColor(slope, 10);
+                const coarse = layer._createTricolorColor(slope, 100);
+                expect(Math.abs(coarse[0] - coarse[2])).toBeLessThan(Math.abs(fine[0] - fine[2]));
+            });
+
+            it('should exaggerate gradients with tricolorExaggeration', () => {
+                const slope = [0, 10, 20, 10, 20, 30, 20, 30, 40];
+                const plain = L.gridLayer.relief({ mode: 'tricolor' });
+                const boosted = L.gridLayer.relief({
+                    mode: 'tricolor',
+                    tricolorExaggeration: 4,
+                });
+                const plainColor = plain._createTricolorColor(slope, 100);
+                const boostedColor = boosted._createTricolorColor(slope, 100);
+                expect(Math.abs(boostedColor[0] - boostedColor[2])).toBeGreaterThan(
+                    Math.abs(plainColor[0] - plainColor[2])
+                );
+            });
+
+            it('should light NW-facing slopes in the red channel', () => {
+                const layer = L.gridLayer.relief({ mode: 'tricolor' });
+                // Upslope toward SE: surface faces NW (lit by the 315° red channel)
+                const nwFacing = [0, 10, 20, 10, 20, 30, 20, 30, 40];
+                const seFacing = [40, 30, 20, 30, 20, 10, 20, 10, 0];
+                const nwColor = layer._createTricolorColor(nwFacing, 50);
+                const seColor = layer._createTricolorColor(seFacing, 50);
+                expect(nwColor[0]).toBeGreaterThan(nwColor[2]);
+                expect(seColor[2]).toBeGreaterThan(seColor[0]);
+            });
+        });
+
+        describe('_fillTricolorTile', () => {
+            it('should fill valid terrain with opaque colored pixels', () => {
+                const layer = L.gridLayer.relief({ mode: 'tricolor' });
+                const outputData = new Uint8ClampedArray(256 * 256 * 4);
+                const tileData = new Uint8ClampedArray(256 * 256 * 4);
+                fillFlatTile(tileData, 500);
+
+                const coords = { x: 10, y: 20, z: 8 } as L.Coords;
+                expect(() => {
+                    layer._fillTricolorTile(outputData, tileData, coords);
+                }).not.toThrow();
+                const hasNonZeroPixels = outputData.some(value => value > 0);
+                expect(hasNonZeroPixels).toBe(true);
+            });
         });
     });
 
