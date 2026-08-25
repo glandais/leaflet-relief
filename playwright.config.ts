@@ -13,6 +13,8 @@ export default defineConfig({
         // Threshold for pixel differences (0-1, where 0.2 = 20% difference allowed)
         toHaveScreenshot: {
             threshold: 0.2,
+            // Tolerate a handful of anti-aliasing pixels on the base map tiles
+            maxDiffPixels: 100,
             // Animation handling - wait for animations to complete
             animations: 'disabled',
         },

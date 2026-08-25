@@ -42,6 +42,47 @@ npm run test:visual:headed
 npm run test:visual:update
 ```
 
+### Reference Environment (Docker)
+
+Reference screenshots are pixel-comparisons, so they are only meaningful when produced by the
+same rendering stack. Running `npm run test:visual` directly on a workstation compares against
+references generated elsewhere and typically fails on every test — including `base-map-only`,
+which does not use the plugin at all — because of font rendering, Chromium version and base map
+tile differences.
+
+**The reference environment is the official Playwright container**, pinned to the same version as
+the `@playwright/test` devDependency (currently `1.62.1`). Regenerate references with:
+
+```bash
+docker run --rm --init --ipc=host \
+    --user $(id -u):$(id -g) -e HOME=/tmp \
+    -v "$PWD":/work -w /work \
+    mcr.microsoft.com/playwright:v1.62.1-noble \
+    npx playwright test visual.spec.ts --update-snapshots
+```
+
+Then verify the regenerated references are stable by running the suite again in comparison mode:
+
+```bash
+docker run --rm --init --ipc=host \
+    --user $(id -u):$(id -g) -e HOME=/tmp \
+    -v "$PWD":/work -w /work \
+    mcr.microsoft.com/playwright:v1.62.1-noble \
+    npx playwright test
+```
+
+Notes on the flags:
+
+- `--user $(id -u):$(id -g)` with `-e HOME=/tmp` keeps regenerated PNGs owned by your user
+  instead of root.
+- `--ipc=host` prevents Chromium from crashing on the container's default 64 MB `/dev/shm`.
+- `--init` reaps the browser processes so the run exits cleanly.
+- The container needs network access: the tests fetch OSM base tiles and AWS Terrarium
+  elevation tiles.
+- `node_modules` is used from the mounted repo, so run `npm ci` on the host first. Keep the
+  image tag in sync with `@playwright/test` whenever that dependency is bumped, and regenerate
+  the references in the same commit.
+
 ### Test Scenarios
 
 1. **Initial Setup** - Generate reference screenshots:
@@ -66,6 +107,10 @@ npm run test:visual:update
     ```bash
     npm run test:visual:update
     ```
+
+> The `npm run test:visual:update` shorthand above uses whatever browser is installed locally.
+> Any update that ends up committed must be produced in the
+> [reference environment](#reference-environment-docker) instead.
 
 ## Understanding Test Results
 
@@ -102,11 +147,17 @@ In `playwright.config.ts`:
 ```typescript
 expect: {
   toHaveScreenshot: {
-    threshold: 0.2,  // 20% difference allowed
+    threshold: 0.2,       // per-pixel color tolerance
+    maxDiffPixels: 100,   // total number of differing pixels tolerated
     animations: 'disabled'
   }
 }
 ```
+
+`threshold` and `maxDiffPixels` are complementary: `threshold` decides whether a single pixel
+counts as different, `maxDiffPixels` bounds how many such pixels the whole screenshot may
+contain. The small `maxDiffPixels` budget absorbs the handful of anti-aliasing pixels that vary
+between two runs on the base map tiles.
 
 ### Screenshot Masks
 
@@ -128,6 +179,10 @@ Update reference screenshots when:
 - ✅ Improving visual quality
 - ✅ Adding new color schemes or features
 - ❌ Not for unintended visual regressions
+
+Always regenerate them in the [reference environment](#reference-environment-docker), never
+straight from a workstation — a local update rewrites every reference with locally-specific
+rendering and silently destroys the baseline for the tests you did not intend to change.
 
 ### Debugging Failed Tests
 

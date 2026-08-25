@@ -62,7 +62,11 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - `dist/L.GridLayer.Relief.d.ts` - TypeScript type definitions
 - `index.html` - Interactive demo with controls for azimuth/elevation adjustment
 - `test/L.GridLayer.Relief.test.ts` - Jest unit tests for plugin functionality (TypeScript)
+- `e2e/relief.spec.ts` - Playwright functional end-to-end tests against `index.html`
+- `e2e/visual.spec.ts` + `e2e/visual.spec.ts-snapshots/` - Visual regression tests and their reference screenshots
+- `playwright.config.ts` - Playwright configuration (dev server, screenshot comparison thresholds)
 - `README.md` - Comprehensive plugin documentation
+- `VISUAL_TESTING.md` - Visual regression testing guide; read it before touching rendering code or reference screenshots
 - `package.json` - NPM package configuration with semantic-release
 - `LICENSE` - MIT license
 - `.github/workflows/release.yml` - CI/CD pipeline for automated releases
@@ -87,6 +91,8 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - **Jest Testing**: 25+ unit tests covering all major functionality
 - **Coverage**: ~68% code coverage with thresholds set at 50%
 - **Mocking**: Canvas API and network requests properly mocked for testing
+- **End-to-End**: Playwright suite in `e2e/` - functional tests plus pixel-comparison visual regression tests
+- **Visual Regression**: Any change to the rendering algorithms invalidates the reference screenshots. They must be regenerated in the Docker reference environment, never from a workstation - see [VISUAL_TESTING.md](VISUAL_TESTING.md)
 - **CI Integration**: Tests run automatically on all commits and before releases
 
 ### Release Workflow
@@ -227,6 +233,21 @@ const customRelief = L.gridLayer.relief({
 npm test                # Run all tests
 npm run test:watch      # Run tests in watch mode
 npm run test:coverage   # Generate coverage report
+npm run test:e2e        # Run Playwright end-to-end tests
+npm run test:visual     # Run visual regression tests only
+```
+
+Visual regression references are environment-specific: running `npm run test:visual` on a
+workstation fails on every test. Run them - and regenerate them after an intentional rendering
+change - in the pinned Playwright container, as documented in
+[VISUAL_TESTING.md](VISUAL_TESTING.md):
+
+```bash
+docker run --rm --init --ipc=host \
+    --user $(id -u):$(id -g) -e HOME=/tmp \
+    -v "$PWD":/work -w /work \
+    mcr.microsoft.com/playwright:v1.62.1-noble \
+    npx playwright test visual.spec.ts --update-snapshots
 ```
 
 ### Release (Automated)
