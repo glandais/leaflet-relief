@@ -76,6 +76,30 @@ declare global {
                     abortSignal?: AbortSignal
                 ): void;
 
+                _recomputeArcheoConstants(): void;
+                _createArcheoColor(
+                    zData: number[],
+                    pixelSizeMeters: number
+                ): [number, number, number, number];
+                _fillArcheoTile(
+                    data: Uint8ClampedArray,
+                    tileData: ElevationTileData,
+                    coords: L.Coords,
+                    abortSignal?: AbortSignal
+                ): void;
+
+                _recomputeTricolorConstants(): void;
+                _createTricolorColor(
+                    zData: number[],
+                    pixelSizeMeters: number
+                ): [number, number, number, number];
+                _fillTricolorTile(
+                    data: Uint8ClampedArray,
+                    tileData: ElevationTileData,
+                    coords: L.Coords,
+                    abortSignal?: AbortSignal
+                ): void;
+
                 // Private properties
                 _state: ReliefState;
             }
@@ -90,13 +114,19 @@ export interface ReliefState {
     hillshadeA1: number;
     hillshadeA2: number;
     hillshadeA3: number;
+    archeoA1: number;
+    archeoA2: number[];
+    archeoA3: number[];
+    tricolorA1: number;
+    tricolorA2: number[];
+    tricolorA3: number[];
     abortControllers: globalThis.Map<string, AbortController>;
     missingTiles: Set<string>;
 }
 
 // Type definitions
 export interface ReliefOptions extends L.GridLayerOptions {
-    mode?: 'hillshade' | 'slope';
+    mode?: 'hillshade' | 'slope' | 'archeo' | 'tricolor';
     hillshadeAzimuth?: number;
     hillshadeElevation?: number;
     hillshadeExaggeration?: number;
@@ -104,6 +134,17 @@ export interface ReliefOptions extends L.GridLayerOptions {
     slopeColorFunction?: SlopeColorFunction;
     slopeColorConfig?: SlopeColorConfig[];
     slopeColorScheme?: 'default' | 'glacial' | 'thermal' | 'earth';
+    archeoAzimuths?: number[];
+    archeoElevation?: number;
+    archeoExaggeration?: number;
+    archeoGlowStrength?: number;
+    archeoWarmColor?: [number, number, number];
+    archeoCoolColor?: [number, number, number];
+    archeoBaseColor?: [number, number, number];
+    archeoColorScheme?: 'default' | 'vivid' | 'subtle';
+    tricolorAzimuths?: [number, number, number];
+    tricolorElevation?: number;
+    tricolorExaggeration?: number;
     elevationUrl?: string | ElevationUrlFunction;
     elevationExtractor?: ElevationExtractorFunction;
     elevationFallbackDepth?: number;
@@ -127,6 +168,16 @@ export interface SlopeColorConfig {
 
 export interface SlopeColorSchemes {
     [key: string]: SlopeColorConfig[];
+}
+
+export interface ArcheoColors {
+    warm: [number, number, number];
+    cool: [number, number, number];
+    base: [number, number, number];
+}
+
+export interface ArcheoColorSchemes {
+    [key: string]: ArcheoColors;
 }
 
 // Internal interfaces
@@ -380,6 +431,17 @@ const _resampleParentElevations = function (
 
 // ====================== INTERNAL HILLSHADE FUNCTIONS ======================
 
+const _getLambert = function (
+    dzdx: number,
+    dzdy: number,
+    a1: number,
+    a2: number,
+    a3: number
+): number {
+    const L = (a1 - a2 * dzdx - a3 * dzdy) / Math.sqrt(1 + dzdx ** 2 + dzdy ** 2);
+    return L < 0 ? 0 : L;
+};
+
 const _getL = function (
     z: number[],
     state: ReliefState,
@@ -388,14 +450,30 @@ const _getL = function (
 ): number {
     const dzdx = _getDzdx(z, pixelSizeMeters) * exaggeration;
     const dzdy = _getDzdy(z, pixelSizeMeters) * exaggeration;
-    let L =
-        (state.hillshadeA1 - state.hillshadeA2 * dzdx - state.hillshadeA3 * dzdy) /
-        Math.sqrt(1 + dzdx ** 2 + dzdy ** 2);
-    if (L < 0) {
-        L = 0;
+    const L = _getLambert(dzdx, dzdy, state.hillshadeA1, state.hillshadeA2, state.hillshadeA3);
+    return Math.sqrt(L * 0.8 + 0.2);
+};
+
+// Average of negative-clamped Lambertians over several azimuths, normalized so that
+// flat terrain renders at 1 (the base color) and only slopes darken it. The max(0, .)
+// clamp is what makes this differ from a single mean-direction hillshade: without it
+// the average would collapse algebraically to one light source.
+const _getMultiL = function (
+    z: number[],
+    pixelSizeMeters: number,
+    exaggeration: number,
+    a1: number,
+    a2: number[],
+    a3: number[]
+): number {
+    const dzdx = _getDzdx(z, pixelSizeMeters) * exaggeration;
+    const dzdy = _getDzdy(z, pixelSizeMeters) * exaggeration;
+    let sum = 0;
+    for (let i = 0; i < a2.length; i++) {
+        sum += _getLambert(dzdx, dzdy, a1, a2[i], a3[i]);
     }
-    L = Math.sqrt(L * 0.8 + 0.2);
-    return L;
+    const flat = a1 * a2.length;
+    return flat > 0 ? sum / flat : 0;
 };
 
 const _defaultHillshadeColorFunction: HillshadeColorFunction = function (
@@ -403,6 +481,39 @@ const _defaultHillshadeColorFunction: HillshadeColorFunction = function (
 ): [number, number, number] {
     const value = Math.round(intensity * 255);
     return [value, value, value];
+};
+
+// ====================== INTERNAL ARCHEO FUNCTIONS ======================
+
+// Cap on tint saturation so extreme curvature never reaches a pure color
+const _ARCHEO_MAX_TINT = 0.9;
+
+// 8-neighbor Laplacian, divided by the real-world pixel size so the result is a
+// dimensionless slope change rather than a raw height difference: without it the
+// tint would fade out as soon as the DEM resolution changes.
+// Positive = convex (bump), negative = concave (dip).
+const _getCurvature = function (z: number[], pixelSizeMeters: number): number {
+    return (z[4] - (z[0] + z[1] + z[2] + z[3] + z[5] + z[6] + z[7] + z[8]) / 8) / pixelSizeMeters;
+};
+
+// Colors are reached at full tint; the base is what flat terrain renders as, so it
+// doubles as the overall brightness of the layer.
+const _archeoColorSchemes: ArcheoColorSchemes = {
+    default: {
+        warm: [236, 150, 82],
+        cool: [126, 172, 246],
+        base: [192, 191, 196],
+    },
+    vivid: {
+        warm: [246, 126, 40],
+        cool: [86, 144, 250],
+        base: [198, 197, 202],
+    },
+    subtle: {
+        warm: [226, 180, 142],
+        cool: [166, 190, 236],
+        base: [190, 190, 193],
+    },
 };
 
 // ====================== INTERNAL SLOPE FUNCTIONS ======================
@@ -513,6 +624,16 @@ const ReliefLayerClass = L.GridLayer.extend({
         hillshadeExaggeration: 1,
         hillshadeColorFunction: _defaultHillshadeColorFunction,
         slopeColorFunction: _createSlopeColorFunction(_defaultSlopeColorConfig),
+        archeoAzimuths: [225, 270, 315, 360],
+        archeoElevation: 45,
+        archeoExaggeration: 3,
+        archeoGlowStrength: 15,
+        archeoWarmColor: _archeoColorSchemes.default.warm,
+        archeoCoolColor: _archeoColorSchemes.default.cool,
+        archeoBaseColor: _archeoColorSchemes.default.base,
+        tricolorAzimuths: [315, 15, 75],
+        tricolorElevation: 35,
+        tricolorExaggeration: 1,
         attribution:
             '&copy; <a href="https://mapterhorn.com/attribution/" target="_blank">Mapterhorn</a>',
     },
@@ -522,6 +643,12 @@ const ReliefLayerClass = L.GridLayer.extend({
             hillshadeA1: 0,
             hillshadeA2: 0,
             hillshadeA3: 0,
+            archeoA1: 0,
+            archeoA2: [],
+            archeoA3: [],
+            tricolorA1: 0,
+            tricolorA2: [],
+            tricolorA3: [],
             abortControllers: new globalThis.Map<string, AbortController>(),
             missingTiles: new Set<string>(),
         };
@@ -531,6 +658,19 @@ const ReliefLayerClass = L.GridLayer.extend({
             const scheme =
                 _slopeColorSchemes[options.slopeColorScheme] || _slopeColorSchemes.default;
             options.slopeColorFunction = _createSlopeColorFunction(scheme);
+        }
+        if (options && options.archeoColorScheme) {
+            const scheme =
+                _archeoColorSchemes[options.archeoColorScheme] || _archeoColorSchemes.default;
+            if (!options.archeoWarmColor) {
+                options.archeoWarmColor = scheme.warm;
+            }
+            if (!options.archeoCoolColor) {
+                options.archeoCoolColor = scheme.cool;
+            }
+            if (!options.archeoBaseColor) {
+                options.archeoBaseColor = scheme.base;
+            }
         }
 
         L.Util.setOptions(this, options);
@@ -543,6 +683,8 @@ const ReliefLayerClass = L.GridLayer.extend({
         }
 
         this._recomputeHillshadeConstants();
+        this._recomputeArcheoConstants();
+        this._recomputeTricolorConstants();
 
         this.on('tileunload', function (this: L.GridLayer.Relief, e: L.TileEvent) {
             this._tileUnloaded(e.coords);
@@ -557,6 +699,10 @@ const ReliefLayerClass = L.GridLayer.extend({
     ) {
         if (this.options.mode === 'hillshade') {
             this._fillHillshadeTile(data, tileData, coords, abortSignal);
+        } else if (this.options.mode === 'archeo') {
+            this._fillArcheoTile(data, tileData, coords, abortSignal);
+        } else if (this.options.mode === 'tricolor') {
+            this._fillTricolorTile(data, tileData, coords, abortSignal);
         } else {
             this._fillSlopeTile(data, tileData, coords, abortSignal);
         }
@@ -568,6 +714,30 @@ const ReliefLayerClass = L.GridLayer.extend({
         this._state.hillshadeA1 = Math.sin(beta);
         this._state.hillshadeA2 = Math.cos(beta) * Math.sin(alpha);
         this._state.hillshadeA3 = Math.cos(beta) * Math.cos(alpha);
+    },
+
+    _recomputeArcheoConstants: function () {
+        const beta = (Math.PI / 180) * this.options.archeoElevation;
+        const azimuths: number[] = this.options.archeoAzimuths;
+        this._state.archeoA1 = Math.sin(beta);
+        this._state.archeoA2 = azimuths.map(
+            (azimuth: number) => Math.cos(beta) * Math.sin((Math.PI / 180) * azimuth)
+        );
+        this._state.archeoA3 = azimuths.map(
+            (azimuth: number) => Math.cos(beta) * Math.cos((Math.PI / 180) * azimuth)
+        );
+    },
+
+    _recomputeTricolorConstants: function () {
+        const beta = (Math.PI / 180) * this.options.tricolorElevation;
+        const azimuths: number[] = this.options.tricolorAzimuths;
+        this._state.tricolorA1 = Math.sin(beta);
+        this._state.tricolorA2 = azimuths.map(
+            (azimuth: number) => Math.cos(beta) * Math.sin((Math.PI / 180) * azimuth)
+        );
+        this._state.tricolorA3 = azimuths.map(
+            (azimuth: number) => Math.cos(beta) * Math.cos((Math.PI / 180) * azimuth)
+        );
     },
 
     _getElevation: function (tileData: ElevationTileData, j: number, i: number): number {
@@ -794,6 +964,91 @@ const ReliefLayerClass = L.GridLayer.extend({
         }
 
         return null;
+    },
+
+    _createArcheoColor: function (
+        zData: number[],
+        pixelSizeMeters: number
+    ): [number, number, number, number] {
+        const shade = _getMultiL(
+            zData,
+            pixelSizeMeters,
+            this.options.archeoExaggeration,
+            this._state.archeoA1,
+            this._state.archeoA2,
+            this._state.archeoA3
+        );
+        const curvature = Math.tanh(
+            this.options.archeoGlowStrength * _getCurvature(zData, pixelSizeMeters)
+        );
+        const tint = Math.abs(curvature) * _ARCHEO_MAX_TINT;
+        const glowColor: [number, number, number] =
+            curvature > 0 ? this.options.archeoWarmColor : this.options.archeoCoolColor;
+        const baseColor: [number, number, number] = this.options.archeoBaseColor;
+        return [
+            Math.round(shade * ((1 - tint) * baseColor[0] + tint * glowColor[0])),
+            Math.round(shade * ((1 - tint) * baseColor[1] + tint * glowColor[1])),
+            Math.round(shade * ((1 - tint) * baseColor[2] + tint * glowColor[2])),
+            255,
+        ];
+    },
+
+    _fillArcheoTile: function (
+        data: Uint8ClampedArray,
+        tileData: ElevationTileData,
+        coords: L.Coords,
+        abortSignal?: AbortSignal
+    ): void {
+        const tileSize = (this.getTileSize() as L.Point).x;
+        const pixelSizeMeters = _pixelSizeMeters(coords.y, coords.z, tileSize);
+
+        this._doFillTile(
+            data,
+            tileData,
+            (zData: number[]) => this._createArcheoColor(zData, pixelSizeMeters),
+            abortSignal
+        );
+    },
+
+    _createTricolorColor: function (
+        zData: number[],
+        pixelSizeMeters: number
+    ): [number, number, number, number] {
+        const exaggeration = this.options.tricolorExaggeration;
+        const dzdx = _getDzdx(zData, pixelSizeMeters) * exaggeration;
+        const dzdy = _getDzdy(zData, pixelSizeMeters) * exaggeration;
+        const rgba: [number, number, number, number] = [0, 0, 0, 255];
+        for (let i = 0; i < 3; i++) {
+            // Raw Lambertian, without the ambient lift hillshade mode applies: the RVT
+            // method relies on the three channels keeping their full dynamic range,
+            // which is what makes differently oriented slopes take on a color.
+            const L = _getLambert(
+                dzdx,
+                dzdy,
+                this._state.tricolorA1,
+                this._state.tricolorA2[i],
+                this._state.tricolorA3[i]
+            );
+            rgba[i] = Math.round(255 * L);
+        }
+        return rgba;
+    },
+
+    _fillTricolorTile: function (
+        data: Uint8ClampedArray,
+        tileData: ElevationTileData,
+        coords: L.Coords,
+        abortSignal?: AbortSignal
+    ): void {
+        const tileSize = (this.getTileSize() as L.Point).x;
+        const pixelSizeMeters = _pixelSizeMeters(coords.y, coords.z, tileSize);
+
+        this._doFillTile(
+            data,
+            tileData,
+            (zData: number[]) => this._createTricolorColor(zData, pixelSizeMeters),
+            abortSignal
+        );
     },
 
     _tileUnloaded: function (coords: L.Coords): void {

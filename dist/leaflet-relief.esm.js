@@ -70,20 +70,82 @@ var t = 40075017, n = [
 		}
 	}
 	return o;
-}, v = function(e, t, n, r) {
-	let i = u(e, n) * r, a = d(e, n) * r, o = (t.hillshadeA1 - t.hillshadeA2 * i - t.hillshadeA3 * a) / Math.sqrt(1 + i ** 2 + a ** 2);
-	return o < 0 && (o = 0), o = Math.sqrt(o * .8 + .2), o;
-}, y = function(e) {
+}, v = function(e, t, n, r, i) {
+	let a = (n - r * e - i * t) / Math.sqrt(1 + e ** 2 + t ** 2);
+	return a < 0 ? 0 : a;
+}, y = function(e, t, n, r) {
+	let i = v(u(e, n) * r, d(e, n) * r, t.hillshadeA1, t.hillshadeA2, t.hillshadeA3);
+	return Math.sqrt(i * .8 + .2);
+}, b = function(e, t, n, r, i, a) {
+	let o = u(e, t) * n, s = d(e, t) * n, c = 0;
+	for (let e = 0; e < i.length; e++) c += v(o, s, r, i[e], a[e]);
+	let l = r * i.length;
+	return l > 0 ? c / l : 0;
+}, x = function(e) {
 	let t = Math.round(e * 255);
 	return [
 		t,
 		t,
 		t
 	];
-}, b = function(e, t) {
+}, S = .9, C = function(e, t) {
+	return (e[4] - (e[0] + e[1] + e[2] + e[3] + e[5] + e[6] + e[7] + e[8]) / 8) / t;
+}, w = {
+	default: {
+		warm: [
+			236,
+			150,
+			82
+		],
+		cool: [
+			126,
+			172,
+			246
+		],
+		base: [
+			192,
+			191,
+			196
+		]
+	},
+	vivid: {
+		warm: [
+			246,
+			126,
+			40
+		],
+		cool: [
+			86,
+			144,
+			250
+		],
+		base: [
+			198,
+			197,
+			202
+		]
+	},
+	subtle: {
+		warm: [
+			226,
+			180,
+			142
+		],
+		cool: [
+			166,
+			190,
+			236
+		],
+		base: [
+			190,
+			190,
+			193
+		]
+	}
+}, T = function(e, t) {
 	let n = u(e, t), r = d(e, t);
 	return Math.atan(Math.sqrt(n * n + r * r)) * 180 / Math.PI;
-}, x = (e, t, n) => {
+}, E = (e, t, n) => {
 	for (; e < 0;) e += 360;
 	for (; e > 360;) e -= 360;
 	e /= 60;
@@ -118,7 +180,7 @@ var t = 40075017, n = [
 		Math.round((c + a) * 255),
 		255
 	];
-}, S = [
+}, D = [
 	{
 		slope: {
 			min: 0,
@@ -159,8 +221,8 @@ var t = 40075017, n = [
 			max: -60
 		}
 	}
-], C = {
-	default: S,
+], O = {
+	default: D,
 	glacial: [
 		{
 			slope: {
@@ -297,20 +359,20 @@ var t = 40075017, n = [
 			}
 		}
 	]
-}, w = function(e) {
+}, k = function(e) {
 	return function(t) {
-		if (t < e[0].slope.min) return x(e[0].h.min, 1, 1).slice(0, 3);
+		if (t < e[0].slope.min) return E(e[0].h.min, 1, 1).slice(0, 3);
 		for (let n = 0; n < e.length; n++) {
 			let r = e[n];
 			if (t >= r.slope.min && t <= r.slope.max) {
 				let e = (t - r.slope.min) / (r.slope.max - r.slope.min);
-				return x(r.h.min + e * (r.h.max - r.h.min), 1, 1).slice(0, 3);
+				return E(r.h.min + e * (r.h.max - r.h.min), 1, 1).slice(0, 3);
 			}
 		}
 		let n = e[e.length - 1];
-		return x(n.h.max, 1, 1).slice(0, 3);
+		return E(n.h.max, 1, 1).slice(0, 3);
 	};
-}, T = e.GridLayer.extend({
+}, A = e.GridLayer.extend({
 	options: {
 		mode: "hillshade",
 		elevationUrl: i,
@@ -319,27 +381,64 @@ var t = 40075017, n = [
 		hillshadeAzimuth: 315,
 		hillshadeElevation: 45,
 		hillshadeExaggeration: 1,
-		hillshadeColorFunction: y,
-		slopeColorFunction: w(S),
+		hillshadeColorFunction: x,
+		slopeColorFunction: k(D),
+		archeoAzimuths: [
+			225,
+			270,
+			315,
+			360
+		],
+		archeoElevation: 45,
+		archeoExaggeration: 3,
+		archeoGlowStrength: 15,
+		archeoWarmColor: w.default.warm,
+		archeoCoolColor: w.default.cool,
+		archeoBaseColor: w.default.base,
+		tricolorAzimuths: [
+			315,
+			15,
+			75
+		],
+		tricolorElevation: 35,
+		tricolorExaggeration: 1,
 		attribution: "&copy; <a href=\"https://mapterhorn.com/attribution/\" target=\"_blank\">Mapterhorn</a>"
 	},
 	initialize: function(t) {
-		this._state = {
+		if (this._state = {
 			hillshadeA1: 0,
 			hillshadeA2: 0,
 			hillshadeA3: 0,
+			archeoA1: 0,
+			archeoA2: [],
+			archeoA3: [],
+			tricolorA1: 0,
+			tricolorA2: [],
+			tricolorA3: [],
 			abortControllers: new globalThis.Map(),
 			missingTiles: /* @__PURE__ */ new Set()
-		}, t && t.slopeColorConfig ? t.slopeColorFunction = w(t.slopeColorConfig) : t && t.slopeColorScheme && (t.slopeColorFunction = w(C[t.slopeColorScheme] || C.default)), e.Util.setOptions(this, t), (!t || t.maxNativeZoom === void 0) && (this.options.maxNativeZoom = s(this.options.elevationUrl)), this._recomputeHillshadeConstants(), this.on("tileunload", function(e) {
+		}, t && t.slopeColorConfig ? t.slopeColorFunction = k(t.slopeColorConfig) : t && t.slopeColorScheme && (t.slopeColorFunction = k(O[t.slopeColorScheme] || O.default)), t && t.archeoColorScheme) {
+			let e = w[t.archeoColorScheme] || w.default;
+			t.archeoWarmColor ||= e.warm, t.archeoCoolColor ||= e.cool, t.archeoBaseColor ||= e.base;
+		}
+		e.Util.setOptions(this, t), (!t || t.maxNativeZoom === void 0) && (this.options.maxNativeZoom = s(this.options.elevationUrl)), this._recomputeHillshadeConstants(), this._recomputeArcheoConstants(), this._recomputeTricolorConstants(), this.on("tileunload", function(e) {
 			this._tileUnloaded(e.coords);
 		});
 	},
 	_fillTile: async function(e, t, n, r) {
-		this.options.mode === "hillshade" ? this._fillHillshadeTile(e, t, n, r) : this._fillSlopeTile(e, t, n, r);
+		this.options.mode === "hillshade" ? this._fillHillshadeTile(e, t, n, r) : this.options.mode === "archeo" ? this._fillArcheoTile(e, t, n, r) : this.options.mode === "tricolor" ? this._fillTricolorTile(e, t, n, r) : this._fillSlopeTile(e, t, n, r);
 	},
 	_recomputeHillshadeConstants: function() {
 		let e = Math.PI / 180 * this.options.hillshadeAzimuth, t = Math.PI / 180 * this.options.hillshadeElevation;
 		this._state.hillshadeA1 = Math.sin(t), this._state.hillshadeA2 = Math.cos(t) * Math.sin(e), this._state.hillshadeA3 = Math.cos(t) * Math.cos(e);
+	},
+	_recomputeArcheoConstants: function() {
+		let e = Math.PI / 180 * this.options.archeoElevation, t = this.options.archeoAzimuths;
+		this._state.archeoA1 = Math.sin(e), this._state.archeoA2 = t.map((t) => Math.cos(e) * Math.sin(Math.PI / 180 * t)), this._state.archeoA3 = t.map((t) => Math.cos(e) * Math.cos(Math.PI / 180 * t));
+	},
+	_recomputeTricolorConstants: function() {
+		let e = Math.PI / 180 * this.options.tricolorElevation, t = this.options.tricolorAzimuths;
+		this._state.tricolorA1 = Math.sin(e), this._state.tricolorA2 = t.map((t) => Math.cos(e) * Math.sin(Math.PI / 180 * t)), this._state.tricolorA3 = t.map((t) => Math.cos(e) * Math.cos(Math.PI / 180 * t));
 	},
 	_getElevation: function(e, t, n) {
 		let r = this.getTileSize().x;
@@ -378,7 +477,7 @@ var t = 40075017, n = [
 		}
 	},
 	_createHillshadeColor: function(e, t) {
-		let n = v(e, this._state, t, this.options.hillshadeExaggeration), [r, i, a] = this.options.hillshadeColorFunction(n);
+		let n = y(e, this._state, t, this.options.hillshadeExaggeration), [r, i, a] = this.options.hillshadeColorFunction(n);
 		return [
 			r,
 			i,
@@ -391,7 +490,7 @@ var t = 40075017, n = [
 		this._doFillTile(e, t, (e) => this._createHillshadeColor(e, a), r);
 	},
 	_createSlopeColor: function(e, t) {
-		let r = b(e, t);
+		let r = T(e, t);
 		if (r < .5) return n;
 		{
 			let e = this.options.slopeColorFunction(r);
@@ -446,6 +545,36 @@ var t = 40075017, n = [
 		}
 		return null;
 	},
+	_createArcheoColor: function(e, t) {
+		let n = b(e, t, this.options.archeoExaggeration, this._state.archeoA1, this._state.archeoA2, this._state.archeoA3), r = Math.tanh(this.options.archeoGlowStrength * C(e, t)), i = Math.abs(r) * S, a = r > 0 ? this.options.archeoWarmColor : this.options.archeoCoolColor, o = this.options.archeoBaseColor;
+		return [
+			Math.round(n * ((1 - i) * o[0] + i * a[0])),
+			Math.round(n * ((1 - i) * o[1] + i * a[1])),
+			Math.round(n * ((1 - i) * o[2] + i * a[2])),
+			255
+		];
+	},
+	_fillArcheoTile: function(e, t, n, r) {
+		let i = this.getTileSize().x, a = f(n.y, n.z, i);
+		this._doFillTile(e, t, (e) => this._createArcheoColor(e, a), r);
+	},
+	_createTricolorColor: function(e, t) {
+		let n = this.options.tricolorExaggeration, r = u(e, t) * n, i = d(e, t) * n, a = [
+			0,
+			0,
+			0,
+			255
+		];
+		for (let e = 0; e < 3; e++) {
+			let t = v(r, i, this._state.tricolorA1, this._state.tricolorA2[e], this._state.tricolorA3[e]);
+			a[e] = Math.round(255 * t);
+		}
+		return a;
+	},
+	_fillTricolorTile: function(e, t, n, r) {
+		let i = this.getTileSize().x, a = f(n.y, n.z, i);
+		this._doFillTile(e, t, (e) => this._createTricolorColor(e, a), r);
+	},
 	_tileUnloaded: function(e) {
 		let t = `${e.z}/${e.x}/${e.y}`;
 		if (this._state.abortControllers.has(t)) {
@@ -482,7 +611,7 @@ var t = 40075017, n = [
 		this._tileUnloaded(e);
 	}
 });
-e.GridLayer.Relief = T, e.gridLayer.relief = function(t) {
+e.GridLayer.Relief = A, e.gridLayer.relief = function(t) {
 	return new e.GridLayer.Relief(t);
 }, e.GridLayer.Relief.elevationExtractors = {
 	terrarium: c,

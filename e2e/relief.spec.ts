@@ -23,6 +23,8 @@ test.describe('Leaflet Relief Plugin E2E Tests', () => {
         await expect(page.locator('#map')).toBeVisible();
         await expect(page.locator('#hillshadeBtn')).toBeVisible();
         await expect(page.locator('#slopeBtn')).toBeVisible();
+        await expect(page.locator('#archeoBtn')).toBeVisible();
+        await expect(page.locator('#tricolorBtn')).toBeVisible();
         await expect(page.locator('#toggleBtn')).toBeVisible();
         await expect(page.locator('#opacitySlider')).toBeVisible();
 
@@ -57,6 +59,66 @@ test.describe('Leaflet Relief Plugin E2E Tests', () => {
         await expect(page.locator('#slopeBtn')).not.toHaveClass(/active/);
         await expect(page.locator('#hillshadeControls')).toBeVisible();
         await expect(page.locator('#slopeControls')).not.toBeVisible();
+    });
+
+    test('should switch to archeo and tricolor modes', async ({ page }) => {
+        // Click archeo button
+        await page.click('#archeoBtn');
+        await page.waitForTimeout(1000); // Wait for layer update
+
+        await expect(page.locator('#archeoBtn')).toHaveClass(/active/);
+        await expect(page.locator('#hillshadeBtn')).not.toHaveClass(/active/);
+        await expect(page.locator('#archeoControls')).toBeVisible();
+        await expect(page.locator('#hillshadeControls')).not.toBeVisible();
+        await expect(page.locator('#glowSlider')).toBeVisible();
+        await expect(page.locator('#archeoSchemeSelect')).toBeVisible();
+
+        // Click tricolor button
+        await page.click('#tricolorBtn');
+        await page.waitForTimeout(1000); // Wait for layer update
+
+        await expect(page.locator('#tricolorBtn')).toHaveClass(/active/);
+        await expect(page.locator('#archeoBtn')).not.toHaveClass(/active/);
+        await expect(page.locator('#archeoControls')).not.toBeVisible();
+        await expect(page.locator('#tricolorControls')).toBeVisible();
+        await expect(page.locator('#tricolorRedSlider')).toBeVisible();
+        await expect(page.locator('#tricolorElevationSlider')).toBeVisible();
+        await expect(page.locator('#tricolorExaggerationSlider')).toBeVisible();
+    });
+
+    test('should expose every archeo parameter', async ({ page }) => {
+        await page.click('#archeoBtn');
+        await page.waitForTimeout(1000);
+
+        await expect(page.locator('#archeoAzimuthsInput')).toBeVisible();
+        await expect(page.locator('#archeoElevationSlider')).toBeVisible();
+        await expect(page.locator('#archeoExaggerationSlider')).toBeVisible();
+        await expect(page.locator('#glowSlider')).toBeVisible();
+        await expect(page.locator('#archeoSchemeSelect')).toBeVisible();
+        await expect(page.locator('#archeoWarmInput')).toBeVisible();
+        await expect(page.locator('#archeoCoolInput')).toBeVisible();
+        await expect(page.locator('#archeoBaseInput')).toBeVisible();
+
+        // Picking a preset reloads the color pickers with its colors
+        await page.selectOption('#archeoSchemeSelect', 'vivid');
+        await expect(page.locator('#archeoWarmInput')).toHaveValue('#f67e28');
+        await expect(page.locator('#archeoCoolInput')).toHaveValue('#5690fa');
+        await expect(page.locator('#archeoBaseInput')).toHaveValue('#c6c5ca');
+    });
+
+    test('should switch the elevation source', async ({ page }) => {
+        await expect(page.locator('#sourceSelect')).toBeVisible();
+        await expect(page.locator('#fallbackSlider')).toBeVisible();
+
+        await page.selectOption('#sourceSelect', 'terrarium');
+        await page.waitForTimeout(2000);
+
+        // The layer is recreated and keeps rendering tiles from the new source
+        const tileCount = await page.locator('.leaflet-tile-container canvas').count();
+        expect(tileCount).toBeGreaterThan(0);
+        await expect(page.locator('.leaflet-control-attribution')).toContainText(
+            'Mapzen Elevation'
+        );
     });
 
     test('should toggle relief layer visibility', async ({ page }) => {

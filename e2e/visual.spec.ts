@@ -138,6 +138,56 @@ test.describe('Leaflet Relief Plugin Visual Regression Tests', () => {
         }
     });
 
+    test('should render archeo mode correctly with default settings', async ({ page }) => {
+        await page.setViewportSize({ width: 1200, height: 800 });
+
+        // Switch to archeo mode
+        await page.click('#archeoBtn');
+        await page.waitForTimeout(3000); // Wait for mode switch and rendering
+
+        await expect(page.locator('#map')).toHaveScreenshot('archeo-default.png', {
+            mask: [page.locator('.leaflet-control-attribution')],
+        });
+    });
+
+    test('should render archeo mode with high glow strength', async ({ page }) => {
+        await page.setViewportSize({ width: 1200, height: 800 });
+        await page.click('#archeoBtn');
+        await page.waitForTimeout(2000);
+
+        await page.locator('#glowSlider').fill('35');
+        await page.waitForTimeout(2000); // Wait for rendering
+
+        await expect(page.locator('#map')).toHaveScreenshot('archeo-glow-high.png', {
+            mask: [page.locator('.leaflet-control-attribution')],
+        });
+    });
+
+    test('should render archeo micro-relief over the Cahokia mounds', async ({ page }) => {
+        await page.setViewportSize({ width: 1200, height: 800 });
+        await page.click('#archeoBtn');
+        await page.waitForTimeout(2000);
+
+        await page.selectOption('.location-select', { label: 'Cahokia Mounds, Illinois' });
+        await page.waitForTimeout(4000); // Wait for map to pan and tiles to load
+
+        await expect(page.locator('#map')).toHaveScreenshot('archeo-cahokia.png', {
+            mask: [page.locator('.leaflet-control-attribution')],
+        });
+    });
+
+    test('should render tricolor mode correctly with default settings', async ({ page }) => {
+        await page.setViewportSize({ width: 1200, height: 800 });
+
+        // Switch to tricolor mode
+        await page.click('#tricolorBtn');
+        await page.waitForTimeout(3000); // Wait for mode switch and rendering
+
+        await expect(page.locator('#map')).toHaveScreenshot('tricolor-default.png', {
+            mask: [page.locator('.leaflet-control-attribution')],
+        });
+    });
+
     test('should render with different opacity levels', async ({ page }) => {
         await page.setViewportSize({ width: 1200, height: 800 });
         await page.click('#hillshadeBtn');
