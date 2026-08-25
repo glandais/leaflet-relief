@@ -43,20 +43,47 @@ var t = 40075017, n = [
 }, f = function(e, n, r) {
 	let i = Math.PI - 2 * Math.PI * e / 2 ** n, a = Math.atan(.5 * (Math.exp(i) - Math.exp(-i))), o = t / (r * 2 ** n), s = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, a));
 	return Math.max(.1, o * Math.cos(s));
-}, p = function(e, t, n, r) {
+}, p = 5, m = 2048, h = function(e) {
+	return e === 404 || e === 403 || e === 204;
+}, g = function(e, t, n, r, i, a, o) {
+	let s = a - r + 1, c = new Float32Array(s * (o - i + 1));
+	for (let l = i; l <= o; l++) {
+		let o = (l - i) * s;
+		for (let i = r; i <= a; i++) {
+			let a = (l * t + i) * 4;
+			c[o + (i - r)] = n(e[a], e[a + 1], e[a + 2], e[a + 3]);
+		}
+	}
+	return c;
+}, _ = function(e, t, n, r, i, a) {
+	let o = new Float32Array(t * t), s = t - 1, c = (e) => Math.max(0, Math.min(s, e)), l = t / i, u = c(Math.floor(n - .5)), d = c(Math.floor(n + l - .5) + 1), f = c(Math.floor(r - .5)), p = c(Math.floor(r + l - .5) + 1), m = d - u + 1, h = g(e, t, a, u, f, d, p);
+	for (let e = 0; e < t; e++) {
+		let a = r + (e + .5) / i - .5, l = c(Math.floor(a)), d = Math.min(s, l + 1), p = Math.max(0, Math.min(1, a - l)), g = (l - f) * m, _ = (d - f) * m;
+		for (let r = 0; r < t; r++) {
+			let a = n + (r + .5) / i - .5, l = c(Math.floor(a)) - u, d = Math.min(s, c(Math.floor(a)) + 1) - u, f = Math.max(0, Math.min(1, a - (l + u))), m = h[g + l], v = h[g + d], y = h[_ + l], b = h[_ + d], x;
+			if (m <= 0 || v <= 0 || y <= 0 || b <= 0) x = h[(p < .5 ? g : _) + (f < .5 ? l : d)];
+			else {
+				let e = m + (v - m) * f;
+				x = e + (y + (b - y) * f - e) * p;
+			}
+			o[e * t + r] = x;
+		}
+	}
+	return o;
+}, v = function(e, t, n, r) {
 	let i = u(e, n) * r, a = d(e, n) * r, o = (t.hillshadeA1 - t.hillshadeA2 * i - t.hillshadeA3 * a) / Math.sqrt(1 + i ** 2 + a ** 2);
 	return o < 0 && (o = 0), o = Math.sqrt(o * .8 + .2), o;
-}, m = function(e) {
+}, y = function(e) {
 	let t = Math.round(e * 255);
 	return [
 		t,
 		t,
 		t
 	];
-}, h = function(e, t) {
+}, b = function(e, t) {
 	let n = u(e, t), r = d(e, t);
 	return Math.atan(Math.sqrt(n * n + r * r)) * 180 / Math.PI;
-}, g = (e, t, n) => {
+}, x = (e, t, n) => {
 	for (; e < 0;) e += 360;
 	for (; e > 360;) e -= 360;
 	e /= 60;
@@ -91,7 +118,7 @@ var t = 40075017, n = [
 		Math.round((c + a) * 255),
 		255
 	];
-}, _ = [
+}, S = [
 	{
 		slope: {
 			min: 0,
@@ -132,8 +159,8 @@ var t = 40075017, n = [
 			max: -60
 		}
 	}
-], v = {
-	default: _,
+], C = {
+	default: S,
 	glacial: [
 		{
 			slope: {
@@ -270,29 +297,30 @@ var t = 40075017, n = [
 			}
 		}
 	]
-}, y = function(e) {
+}, w = function(e) {
 	return function(t) {
-		if (t < e[0].slope.min) return g(e[0].h.min, 1, 1).slice(0, 3);
+		if (t < e[0].slope.min) return x(e[0].h.min, 1, 1).slice(0, 3);
 		for (let n = 0; n < e.length; n++) {
 			let r = e[n];
 			if (t >= r.slope.min && t <= r.slope.max) {
 				let e = (t - r.slope.min) / (r.slope.max - r.slope.min);
-				return g(r.h.min + e * (r.h.max - r.h.min), 1, 1).slice(0, 3);
+				return x(r.h.min + e * (r.h.max - r.h.min), 1, 1).slice(0, 3);
 			}
 		}
 		let n = e[e.length - 1];
-		return g(n.h.max, 1, 1).slice(0, 3);
+		return x(n.h.max, 1, 1).slice(0, 3);
 	};
-}, b = e.GridLayer.extend({
+}, T = e.GridLayer.extend({
 	options: {
 		mode: "hillshade",
 		elevationUrl: i,
 		elevationExtractor: c,
+		elevationFallbackDepth: p,
 		hillshadeAzimuth: 315,
 		hillshadeElevation: 45,
 		hillshadeExaggeration: 1,
-		hillshadeColorFunction: m,
-		slopeColorFunction: y(_),
+		hillshadeColorFunction: y,
+		slopeColorFunction: w(S),
 		attribution: "&copy; <a href=\"https://mapterhorn.com/attribution/\" target=\"_blank\">Mapterhorn</a>"
 	},
 	initialize: function(t) {
@@ -300,8 +328,9 @@ var t = 40075017, n = [
 			hillshadeA1: 0,
 			hillshadeA2: 0,
 			hillshadeA3: 0,
-			abortControllers: new globalThis.Map()
-		}, t && t.slopeColorConfig ? t.slopeColorFunction = y(t.slopeColorConfig) : t && t.slopeColorScheme && (t.slopeColorFunction = y(v[t.slopeColorScheme] || v.default)), e.Util.setOptions(this, t), (!t || t.maxNativeZoom === void 0) && (this.options.maxNativeZoom = s(this.options.elevationUrl)), this._recomputeHillshadeConstants(), this.on("tileunload", function(e) {
+			abortControllers: new globalThis.Map(),
+			missingTiles: /* @__PURE__ */ new Set()
+		}, t && t.slopeColorConfig ? t.slopeColorFunction = w(t.slopeColorConfig) : t && t.slopeColorScheme && (t.slopeColorFunction = w(C[t.slopeColorScheme] || C.default)), e.Util.setOptions(this, t), (!t || t.maxNativeZoom === void 0) && (this.options.maxNativeZoom = s(this.options.elevationUrl)), this._recomputeHillshadeConstants(), this.on("tileunload", function(e) {
 			this._tileUnloaded(e.coords);
 		});
 	},
@@ -313,8 +342,10 @@ var t = 40075017, n = [
 		this._state.hillshadeA1 = Math.sin(t), this._state.hillshadeA2 = Math.cos(t) * Math.sin(e), this._state.hillshadeA3 = Math.cos(t) * Math.cos(e);
 	},
 	_getElevation: function(e, t, n) {
-		let r = (n * this.getTileSize().x + t) * 4, i = e[r], a = e[r + 1], o = e[r + 2], s = e[r + 3];
-		return this.options.elevationExtractor(i, a, o, s);
+		let r = this.getTileSize().x;
+		if (e instanceof Float32Array) return e[n * r + t];
+		let i = (n * r + t) * 4, a = e[i], o = e[i + 1], s = e[i + 2], c = e[i + 3];
+		return this.options.elevationExtractor(a, o, s, c);
 	},
 	_getZ: function(e, t, n) {
 		let r = this.getTileSize().x;
@@ -347,7 +378,7 @@ var t = 40075017, n = [
 		}
 	},
 	_createHillshadeColor: function(e, t) {
-		let n = p(e, this._state, t, this.options.hillshadeExaggeration), [r, i, a] = this.options.hillshadeColorFunction(n);
+		let n = v(e, this._state, t, this.options.hillshadeExaggeration), [r, i, a] = this.options.hillshadeColorFunction(n);
 		return [
 			r,
 			i,
@@ -360,7 +391,7 @@ var t = 40075017, n = [
 		this._doFillTile(e, t, (e) => this._createHillshadeColor(e, a), r);
 	},
 	_createSlopeColor: function(e, t) {
-		let r = h(e, t);
+		let r = b(e, t);
 		if (r < .5) return n;
 		{
 			let e = this.options.slopeColorFunction(r);
@@ -376,6 +407,45 @@ var t = 40075017, n = [
 		let i = n.y, a = n.z, o = this.getTileSize().x, s = f(i, a, o);
 		this._doFillTile(e, t, (e) => this._createSlopeColor(e, s), r);
 	},
+	_buildElevationUrl: function(e, t, n) {
+		return typeof this.options.elevationUrl == "function" ? this.options.elevationUrl(e, t, n) : this.options.elevationUrl.replace("{z}", e.toString()).replace("{x}", t.toString()).replace("{y}", n.toString());
+	},
+	_rememberMissingTile: function(e) {
+		let t = this._state.missingTiles;
+		if (t.size >= m) {
+			let e = t.values().next().value;
+			e !== void 0 && t.delete(e);
+		}
+		t.add(e);
+	},
+	_fetchDemData: async function(e, t, n, r) {
+		let i = Math.max(0, Math.floor(this.options.elevationFallbackDepth || 0)), a = (t) => this._buildElevationUrl(e.z - t, Math.floor(e.x / 2 ** t), Math.floor(e.y / 2 ** t)), o = 0;
+		for (let t = i; t >= 0; t--) if (e.z - t >= 0 && this._state.missingTiles.has(a(t))) {
+			o = t + 1;
+			break;
+		}
+		for (let a = o; a <= i; a++) {
+			let i = e.z - a;
+			if (i < 0) break;
+			let o = 2 ** a, s = Math.floor(e.x / o), c = Math.floor(e.y / o), l = this._buildElevationUrl(i, s, c), u = await fetch(l, { signal: r });
+			if (h(u.status)) {
+				this._rememberMissingTile(l);
+				continue;
+			}
+			if (!u.ok) throw Error(`Failed to fetch tile: ${u.status}`);
+			let d = await u.blob(), f = await createImageBitmap(d);
+			try {
+				n.imageSmoothingEnabled = !1, n.drawImage(f, 0, 0, t, t);
+			} finally {
+				f.close();
+			}
+			let p = n.getImageData(0, 0, t, t).data;
+			if (a === 0) return p;
+			let m = t / o;
+			return _(p, t, (e.x - s * o) * m, (e.y - c * o) * m, o, this.options.elevationExtractor);
+		}
+		return null;
+	},
 	_tileUnloaded: function(e) {
 		let t = `${e.z}/${e.x}/${e.y}`;
 		if (this._state.abortControllers.has(t)) {
@@ -384,37 +454,35 @@ var t = 40075017, n = [
 		}
 	},
 	createTile: function(e, t) {
-		let n = e.x, i = e.y, a = e.z, o = `${a}/${n}/${i}`, s = this.getTileSize().x, c = document.createElement("canvas");
-		c.setAttribute("width", s.toString()), c.setAttribute("height", s.toString());
-		let l = c.getContext("2d");
-		if (!l) throw Error("Unable to get 2d context from canvas");
-		let u = l.createImageData(s, s), d = new AbortController();
-		this._state.abortControllers.set(o, d);
-		let f = typeof this.options.elevationUrl == "function" ? this.options.elevationUrl(a, n, i) : this.options.elevationUrl.replace("{z}", a.toString()).replace("{x}", n.toString()).replace("{y}", i.toString());
-		return (async () => {
-			let n = null, i = null;
+		let n = e.x, i = e.y, a = `${e.z}/${n}/${i}`, o = this.getTileSize().x, s = document.createElement("canvas");
+		s.setAttribute("width", o.toString()), s.setAttribute("height", o.toString());
+		let c = s.getContext("2d");
+		if (!c) throw Error("Unable to get 2d context from canvas");
+		let l = c.createImageData(o, o), u = new AbortController();
+		return this._state.abortControllers.set(a, u), (async () => {
+			let n = null;
 			try {
-				i = r.acquire(s);
-				let a = i.getContext("2d", { willReadFrequently: !0 });
-				if (!a) throw Error("Unable to get 2d context from DEM canvas");
-				let o = await fetch(f, { signal: d.signal });
-				if (!o.ok) throw Error(`Failed to fetch tile: ${o.status}`);
-				let p = await o.blob();
-				n = await createImageBitmap(p), a.imageSmoothingEnabled = !1, a.drawImage(n, 0, 0, s, s);
-				let m = a.getImageData(0, 0, s, s).data;
-				await this._fillTile(u.data, m, e, d.signal), d.signal.aborted || (l.putImageData(u, 0, 0), t(void 0, c));
+				n = r.acquire(o);
+				let i = n.getContext("2d", { willReadFrequently: !0 });
+				if (!i) throw Error("Unable to get 2d context from DEM canvas");
+				let a = await this._fetchDemData(e, o, i, u.signal);
+				if (a === null) {
+					u.signal.aborted || t(void 0, s);
+					return;
+				}
+				await this._fillTile(l.data, a, e, u.signal), u.signal.aborted || (c.putImageData(l, 0, 0), t(void 0, s));
 			} catch (e) {
-				d.signal.aborted || e instanceof Error && e.name === "AbortError" || (console.error(`Error loading tile ${o}:`, e), t(e instanceof Error ? e : Error(String(e)), c));
+				u.signal.aborted || e instanceof Error && e.name === "AbortError" || (console.error(`Error loading tile ${a}:`, e), t(e instanceof Error ? e : Error(String(e)), s));
 			} finally {
-				this._state.abortControllers.delete(o), n && n.close(), i && r.release(i);
+				this._state.abortControllers.delete(a), n && r.release(n);
 			}
-		})(), c;
+		})(), s;
 	},
 	tileUnloaded: function(e) {
 		this._tileUnloaded(e);
 	}
 });
-e.GridLayer.Relief = b, e.gridLayer.relief = function(t) {
+e.GridLayer.Relief = T, e.gridLayer.relief = function(t) {
 	return new e.GridLayer.Relief(t);
 }, e.GridLayer.Relief.elevationExtractors = {
 	terrarium: c,

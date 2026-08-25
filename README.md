@@ -14,6 +14,7 @@ A Leaflet plugin for terrain visualization that renders relief maps showing hill
 - **Slope Mode**: Colors terrain based on steepness/gradient analysis
 - **High Performance**: Async tile loading with abort controllers and canvas pooling to prevent memory leaks
 - **Edge Pixel Handling**: Intelligent edge clamping for accurate gradient calculations within tiles
+- **Partial Coverage**: Falls back to parent tiles where the elevation source has no data at the requested zoom
 - **Attribution**: Automatically includes proper attribution for Mapzen elevation data
 
 ## Requirements
@@ -401,8 +402,7 @@ Available via `L.GridLayer.Relief.elevationMaxNativeZooms`:
 - `mapterhorn` - `17` (default, matching the default elevation source)
 
 Custom elevation sources are left unclamped (their depth is unknown), so set the option
-yourself when using another provider. Coverage is also not uniform: some areas stop earlier
-than the source maximum.
+yourself when using another provider.
 
 ```javascript
 const relief = L.gridLayer.relief({
@@ -410,6 +410,35 @@ const relief = L.gridLayer.relief({
     maxNativeZoom: 13,
 });
 ```
+
+### Partial Coverage
+
+`maxNativeZoom` is a single global value, but coverage is not uniform. Mapterhorn, for
+instance, publishes zoom 17 over countries with LiDAR datasets and stops much earlier
+elsewhere: around Cork, Ireland, tiles are already missing at zoom 13. No provider
+publishes an index of that, so the layer detects it while loading.
+
+When a tile is missing (`404`, `403` or `204`), the layer walks up to the parent tiles
+until it finds data, then resamples the relevant quadrant back to the requested tile.
+Interpolation runs on decoded elevations rather than on the encoded pixels — Terrarium and
+Terrain-RGB spread elevation across channels, so blending the raw RGBA would invent
+terrain. Shading stays consistent: the result is smooth, only less detailed.
+
+`elevationFallbackDepth` sets how many parent levels may be walked (default `5`, which
+covers Mapterhorn's worst case of zoom 17 requested over zoom 12 data). Set it to `0` to
+disable the fallback entirely.
+
+```javascript
+const relief = L.gridLayer.relief({
+    elevationFallbackDepth: 5,
+});
+```
+
+Missing tiles are memoized per layer, so panning does not re-request them — absent tiles
+are usually served without cache headers. A missing tile also rules out its descendants,
+which lets the layer skip the zoom levels it already knows to be empty. When no zoom has
+data at all (open sea, area outside the source), the tile is simply left transparent
+instead of being reported as an error.
 
 #### Constructor Options
 
@@ -427,6 +456,7 @@ Inherits all options from [`L.GridLayer`](https://leafletjs.com/reference.html#g
 | `slopeColorFunction`     | `Function`        | Default green→red | Custom color function for slope mode `function(slopeDegrees)` returns `[r, g, b]`                                                                           |
 | `elevationUrl`           | `String/Function` | AWS Terrarium     | Custom elevation tile URL pattern or function                                                                                                               |
 | `elevationExtractor`     | `Function`        | Terrarium decoder | Custom function to extract elevation from RGBA values                                                                                                       |
+| `elevationFallbackDepth` | `Number`          | `5`               | Parent levels to walk up when a tile is missing, upsampling the first one found; `0` disables the fallback                                                  |
 | `maxNativeZoom`          | `Number`          | Source dependent  | Deepest zoom the elevation source provides; deeper zooms upscale the last tile. Defaults to `17` (Mapterhorn) or `15` (Terrarium); unset for custom sources |
 
 **Note**: Slope color options are mutually exclusive (XOR): only one of `slopeColorScheme`, `slopeColorConfig`, or `slopeColorFunction` should be used.
@@ -496,6 +526,7 @@ The plugin supports any RGB-encoded elevation tiles with configurable decoders:
 - Edge pixel clamping provides accurate gradient calculations within single tiles
 - Latitude correction applied to pixel scaling for accurate slope measurements
 - `willReadFrequently` canvas optimization for efficient elevation data extraction
+- Missing elevation tiles are memoized, and a missing tile rules out every zoom below it
 
 ## Browser Support
 

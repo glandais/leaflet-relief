@@ -21,9 +21,13 @@ HTMLCanvasElement.prototype.getContext = vi.fn(function (type: string) {
     if (type === '2d') {
         return {
             putImageData: vi.fn(),
-            createImageData: vi.fn(() => ({ data: new Uint8ClampedArray(256 * 256 * 4) })),
+            createImageData: vi.fn(() => ({
+                data: new Uint8ClampedArray(256 * 256 * 4),
+            })),
             drawImage: vi.fn(),
-            getImageData: vi.fn(() => ({ data: new Uint8ClampedArray(256 * 256 * 4) })),
+            getImageData: vi.fn(() => ({
+                data: new Uint8ClampedArray(256 * 256 * 4),
+            })),
         };
     }
     return null;
@@ -128,7 +132,10 @@ describe('L.GridLayer.Relief', () => {
     describe('Slope Configuration', () => {
         it('should accept custom slope color function', () => {
             const colorFunc = (_slope: number) => [0, 255, 0] as [number, number, number];
-            const layer = L.gridLayer.relief({ mode: 'slope', slopeColorFunction: colorFunc });
+            const layer = L.gridLayer.relief({
+                mode: 'slope',
+                slopeColorFunction: colorFunc,
+            });
             expect(layer.options.slopeColorFunction).toBe(colorFunc);
         });
 
@@ -137,12 +144,18 @@ describe('L.GridLayer.Relief', () => {
                 { slope: { min: 0, max: 10 }, h: { min: 120, max: 60 } },
                 { slope: { min: 10, max: 30 }, h: { min: 60, max: 0 } },
             ];
-            const layer = L.gridLayer.relief({ mode: 'slope', slopeColorConfig: colorConfig });
+            const layer = L.gridLayer.relief({
+                mode: 'slope',
+                slopeColorConfig: colorConfig,
+            });
             expect(layer.options.slopeColorFunction).toBeDefined();
         });
 
         it('should accept preset slope color scheme', () => {
-            const layer = L.gridLayer.relief({ mode: 'slope', slopeColorScheme: 'glacial' });
+            const layer = L.gridLayer.relief({
+                mode: 'slope',
+                slopeColorScheme: 'glacial',
+            });
             expect(layer.options.slopeColorFunction).toBeDefined();
         });
 
@@ -154,7 +167,10 @@ describe('L.GridLayer.Relief', () => {
 
     describe('Hillshade Constants', () => {
         it('should compute hillshade constants correctly', () => {
-            const layer = L.gridLayer.relief({ hillshadeAzimuth: 315, hillshadeElevation: 45 });
+            const layer = L.gridLayer.relief({
+                hillshadeAzimuth: 315,
+                hillshadeElevation: 45,
+            });
             // Constants should be computed based on azimuth and elevation
             expect(layer._state.hillshadeA1).toBeDefined();
             expect(layer._state.hillshadeA2).toBeDefined();
@@ -162,7 +178,10 @@ describe('L.GridLayer.Relief', () => {
         });
 
         it('should recompute constants with different angles', () => {
-            const layer = L.gridLayer.relief({ hillshadeAzimuth: 180, hillshadeElevation: 30 });
+            const layer = L.gridLayer.relief({
+                hillshadeAzimuth: 180,
+                hillshadeElevation: 30,
+            });
             expect(layer._state.hillshadeA1).toBeDefined();
             // Should have different values than defaults
             const defaultLayer = L.gridLayer.relief();
@@ -759,7 +778,10 @@ describe('L.GridLayer.Relief', () => {
                     { slope: { min: 10, max: 30 }, h: { min: 60, max: 0 } }, // Yellow to red
                 ];
 
-                const layer = L.gridLayer.relief({ mode: 'slope', slopeColorConfig: colorConfig });
+                const layer = L.gridLayer.relief({
+                    mode: 'slope',
+                    slopeColorConfig: colorConfig,
+                });
                 const colorFunction = layer.options.slopeColorFunction;
                 expect(colorFunction).toBeDefined();
 
@@ -793,7 +815,10 @@ describe('L.GridLayer.Relief', () => {
                     { slope: { min: 15, max: 45 }, h: { min: 60, max: 0 } },
                 ];
 
-                const layer = L.gridLayer.relief({ mode: 'slope', slopeColorConfig: colorConfig });
+                const layer = L.gridLayer.relief({
+                    mode: 'slope',
+                    slopeColorConfig: colorConfig,
+                });
                 const colorFunction = layer.options.slopeColorFunction;
                 expect(colorFunction).toBeDefined();
 
@@ -813,7 +838,10 @@ describe('L.GridLayer.Relief', () => {
                     { slope: { min: 0, max: 20 }, h: { min: 120, max: 0 } }, // Green to red
                 ];
 
-                const layer = L.gridLayer.relief({ mode: 'slope', slopeColorConfig: colorConfig });
+                const layer = L.gridLayer.relief({
+                    mode: 'slope',
+                    slopeColorConfig: colorConfig,
+                });
                 const colorFunction = layer.options.slopeColorFunction;
                 expect(colorFunction).toBeDefined();
 
@@ -831,7 +859,10 @@ describe('L.GridLayer.Relief', () => {
                 const schemes = ['default', 'glacial', 'thermal', 'earth'] as const;
 
                 schemes.forEach(scheme => {
-                    const layer = L.gridLayer.relief({ mode: 'slope', slopeColorScheme: scheme });
+                    const layer = L.gridLayer.relief({
+                        mode: 'slope',
+                        slopeColorScheme: scheme,
+                    });
                     const colorFunction = layer.options.slopeColorFunction;
 
                     expect(colorFunction).toBeDefined();
@@ -1174,6 +1205,217 @@ describe('L.GridLayer.Relief', () => {
                     expect([0, 255]).toContain(color[3]); // Alpha should be 0 or 255
                 });
             });
+        });
+    });
+
+    describe('Elevation data availability', () => {
+        const defaultFetch = global.fetch;
+        const defaultGetContext = HTMLCanvasElement.prototype.getContext;
+
+        const flush = () => new Promise(resolve => setTimeout(resolve, 10));
+
+        const tileResponse = (status: number) => ({
+            ok: status >= 200 && status < 300,
+            status,
+            blob: () => Promise.resolve(new Blob([new ArrayBuffer(1024)], { type: 'image/png' })),
+        });
+
+        // Statuses keyed by zoom level: anything not listed answers 200.
+        const mockFetchByZoom = (statuses: Record<number, number>) => {
+            const urls: string[] = [];
+            global.fetch = vi.fn((url: string) => {
+                urls.push(url);
+                const zoom = Number(url.split('/')[3]);
+                return Promise.resolve(tileResponse(statuses[zoom] ?? 200));
+            }) as any;
+            return urls;
+        };
+
+        const url = 'https://example.com/{z}/{x}/{y}.png';
+
+        afterEach(() => {
+            global.fetch = defaultFetch;
+            HTMLCanvasElement.prototype.getContext = defaultGetContext;
+        });
+
+        it('should default the fallback depth to 5 parent levels', () => {
+            expect(L.gridLayer.relief().options.elevationFallbackDepth).toBe(5);
+        });
+
+        it('should accept a custom fallback depth', () => {
+            const layer = L.gridLayer.relief({ elevationFallbackDepth: 2 });
+            expect(layer.options.elevationFallbackDepth).toBe(2);
+        });
+
+        it('should fall back to the parent tile when the zoom has no data', async () => {
+            const urls = mockFetchByZoom({ 13: 404 });
+            const layer = L.gridLayer.relief({ elevationUrl: url }) as any;
+            const done = vi.fn();
+
+            layer.createTile({ x: 3903, y: 2709, z: 13 } as L.Coords, done);
+            await flush();
+
+            expect(urls).toEqual([
+                'https://example.com/13/3903/2709.png',
+                'https://example.com/12/1951/1354.png',
+            ]);
+            expect(done).toHaveBeenCalledWith(undefined, expect.anything());
+        });
+
+        it('should walk up several levels until data is found', async () => {
+            const urls = mockFetchByZoom({
+                17: 404,
+                16: 404,
+                15: 404,
+                14: 404,
+                13: 404,
+            });
+            const layer = L.gridLayer.relief({ elevationUrl: url }) as any;
+            const done = vi.fn();
+
+            layer.createTile({ x: 64, y: 64, z: 17 } as L.Coords, done);
+            await flush();
+
+            expect(urls).toHaveLength(6);
+            expect(urls[5]).toBe('https://example.com/12/2/2.png');
+            expect(done).toHaveBeenCalledWith(undefined, expect.anything());
+        });
+
+        it('should stop at the configured fallback depth', async () => {
+            const urls = mockFetchByZoom({ 13: 404, 12: 404, 11: 404, 10: 404 });
+            const layer = L.gridLayer.relief({
+                elevationUrl: url,
+                elevationFallbackDepth: 2,
+            }) as any;
+            const done = vi.fn();
+
+            layer.createTile({ x: 3903, y: 2709, z: 13 } as L.Coords, done);
+            await flush();
+
+            expect(urls).toHaveLength(3);
+        });
+
+        it('should not fall back at all when the depth is zero', async () => {
+            const urls = mockFetchByZoom({ 13: 404 });
+            const layer = L.gridLayer.relief({
+                elevationUrl: url,
+                elevationFallbackDepth: 0,
+            }) as any;
+            const done = vi.fn();
+
+            layer.createTile({ x: 3903, y: 2709, z: 13 } as L.Coords, done);
+            await flush();
+
+            expect(urls).toHaveLength(1);
+        });
+
+        it('should render a transparent tile without error when no zoom has data', async () => {
+            mockFetchByZoom({ 13: 404, 12: 404, 11: 404, 10: 404, 9: 404, 8: 404 });
+            const layer = L.gridLayer.relief({ elevationUrl: url }) as any;
+            const done = vi.fn();
+
+            layer.createTile({ x: 3903, y: 2709, z: 13 } as L.Coords, done);
+            await flush();
+
+            expect(done).toHaveBeenCalledTimes(1);
+            expect(done.mock.calls[0][0]).toBeUndefined();
+        });
+
+        it('should memoize missing tiles instead of re-requesting them', async () => {
+            const urls = mockFetchByZoom({ 13: 404 });
+            const layer = L.gridLayer.relief({ elevationUrl: url }) as any;
+            const coords = { x: 3903, y: 2709, z: 13 } as L.Coords;
+
+            layer.createTile(coords, vi.fn());
+            await flush();
+            layer.createTile(coords, vi.fn());
+            await flush();
+
+            expect(urls).toEqual([
+                'https://example.com/13/3903/2709.png',
+                'https://example.com/12/1951/1354.png',
+                'https://example.com/12/1951/1354.png',
+            ]);
+        });
+
+        it('should skip zooms ruled out by a missing ancestor', async () => {
+            const urls = mockFetchByZoom({ 12: 404 });
+            const layer = L.gridLayer.relief({ elevationUrl: url }) as any;
+
+            // Learn that z12 has no data here.
+            layer.createTile({ x: 1951, y: 1354, z: 12 } as L.Coords, vi.fn());
+            await flush();
+            urls.length = 0;
+
+            // A z14 descendant cannot have data either: go straight to z11.
+            layer.createTile({ x: 7804, y: 5416, z: 14 } as L.Coords, vi.fn());
+            await flush();
+
+            expect(urls).toEqual(['https://example.com/11/975/677.png']);
+        });
+
+        it('should report transient failures as errors instead of falling back', async () => {
+            const urls = mockFetchByZoom({ 13: 500 });
+            const layer = L.gridLayer.relief({ elevationUrl: url }) as any;
+            const done = vi.fn();
+
+            layer.createTile({ x: 3903, y: 2709, z: 13 } as L.Coords, done);
+            await flush();
+
+            expect(urls).toHaveLength(1);
+            expect(done.mock.calls[0][0]).toBeInstanceOf(Error);
+        });
+
+        it('should read elevations from an already decoded parent grid', () => {
+            const layer = L.gridLayer.relief() as any;
+            const elevations = new Float32Array(256 * 256);
+            elevations[3 * 256 + 7] = 1234;
+
+            expect(layer._getElevation(elevations, 7, 3)).toBe(1234);
+        });
+
+        it('should shade a tile upsampled from its parent', async () => {
+            // Terrarium-encoded parent tile sloping along x, so every output pixel
+            // has valid data and a non-zero gradient.
+            const parent = new Uint8ClampedArray(256 * 256 * 4);
+            for (let y = 0; y < 256; y++) {
+                for (let x = 0; x < 256; x++) {
+                    const value = 1000 + x * 10 + 32768;
+                    const index = (y * 256 + x) * 4;
+                    parent[index] = Math.floor(value / 256);
+                    parent[index + 1] = value % 256;
+                    parent[index + 2] = 0;
+                    parent[index + 3] = 255;
+                }
+            }
+
+            const output = new Uint8ClampedArray(256 * 256 * 4);
+            HTMLCanvasElement.prototype.getContext = vi.fn(function (type: string) {
+                if (type !== '2d') {
+                    return null;
+                }
+                return {
+                    putImageData: vi.fn(),
+                    createImageData: vi.fn(() => ({ data: output })),
+                    drawImage: vi.fn(),
+                    getImageData: vi.fn(() => ({ data: parent })),
+                };
+            }) as any;
+
+            mockFetchByZoom({ 13: 404 });
+            const layer = L.gridLayer.relief({
+                elevationUrl: url,
+                mode: 'hillshade',
+            }) as any;
+            const done = vi.fn();
+
+            layer.createTile({ x: 3903, y: 2709, z: 13 } as L.Coords, done);
+            await flush();
+
+            expect(done).toHaveBeenCalledWith(undefined, expect.anything());
+            // Opaque everywhere: the parent covers the whole child tile.
+            expect(output[3]).toBe(255);
+            expect(output[(128 * 256 + 128) * 4 + 3]).toBe(255);
         });
     });
 
