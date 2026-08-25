@@ -1,3 +1,10 @@
+## [1.5.5](https://github.com/glandais/leaflet-relief/compare/v1.5.4...v1.5.5) (2026-08-25)
+
+
+### Bug Fixes
+
+* **zoom:** fall back to parent tiles where the source has no data ([#99](https://github.com/glandais/leaflet-relief/issues/99)) ([ac66439](https://github.com/glandais/leaflet-relief/commit/ac6643921fefed640fa00e611c3451581f8ea6a6))
+
 ## [1.5.4](https://github.com/glandais/leaflet-relief/compare/v1.5.3...v1.5.4) (2026-08-25)
 
 
