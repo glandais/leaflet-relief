@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/glandais/leaflet-relief/compare/v1.6.0...v1.7.0) (2026-08-25)
+
+
+### Features
+
+* add IGN LiDAR HD elevation sources (France) ([#101](https://github.com/glandais/leaflet-relief/issues/101)) ([a868034](https://github.com/glandais/leaflet-relief/commit/a86803470dfb6814510c07f391cf9913a4075d13))
+
 # [1.6.0](https://github.com/glandais/leaflet-relief/compare/v1.5.5...v1.6.0) (2026-08-25)
 
 
