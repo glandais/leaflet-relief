@@ -379,6 +379,97 @@ describe('L.GridLayer.Relief', () => {
             expect(L.GridLayer.Relief.elevationUrls.mapterhorn).toContain('mapterhorn.com');
             expect(L.GridLayer.Relief.elevationUrls.mapterhorn).toContain('.webp');
         });
+
+        it('should build an IGN WMS request covering exactly one tile', () => {
+            const url = L.GridLayer.Relief.elevationUrls.ignLidarHdMnt(16, 33810, 23526, 256);
+            const params = new URLSearchParams(url.split('?')[1]);
+
+            expect(url).toContain('https://data.geopf.fr/wms-r/wms?');
+            expect(params.get('LAYERS')).toBe(
+                'IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G'
+            );
+            expect(params.get('FORMAT')).toBe('image/x-bil;bits=32');
+            // EPSG:3857 is accepted but resampled one row out of two, which bands the
+            // hillshade; the request has to stay in EPSG:4326.
+            expect(params.get('CRS')).toBe('EPSG:4326');
+            expect(params.get('WIDTH')).toBe('256');
+            expect(params.get('HEIGHT')).toBe('256');
+
+            // Geographic bounds of tile 16/33810/23526, over Grenoble. WMS 1.3.0 orders
+            // EPSG:4326 axes latitude first: south, west, north, east.
+            const bbox = params.get('BBOX')!.split(',').map(Number);
+            expect(bbox[0]).toBeCloseTo(45.18591, 4);
+            expect(bbox[1]).toBeCloseTo(5.72388, 4);
+            expect(bbox[2]).toBeCloseTo(45.18978, 4);
+            expect(bbox[3]).toBeCloseTo(5.72937, 4);
+        });
+
+        it('should size the IGN request after the tile size', () => {
+            const url = L.GridLayer.Relief.elevationUrls.ignLidarHdMns(16, 33810, 23526, 512);
+            const params = new URLSearchParams(url.split('?')[1]);
+
+            expect(params.get('LAYERS')).toBe(
+                'IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G'
+            );
+            expect(params.get('WIDTH')).toBe('512');
+            expect(params.get('HEIGHT')).toBe('512');
+        });
+    });
+
+    describe('Elevation Tile Decoders', () => {
+        const bil32 = L.GridLayer.Relief.elevationTileDecoders.bil32;
+
+        // One BIL tile: little-endian float32 samples, no header, row-major.
+        const bilTile = (values: number[], sampleCount: number) => {
+            const buffer = new ArrayBuffer(sampleCount * 4);
+            const view = new DataView(buffer);
+            values.forEach((value, index) => view.setFloat32(index * 4, value, true));
+            return buffer;
+        };
+
+        it('should decode little-endian float32 samples to metres', () => {
+            const decoded = bil32(bilTile([211.25, 1234.5], 4), 2);
+
+            expect(decoded).toBeInstanceOf(Float32Array);
+            expect(decoded).toHaveLength(4);
+            expect(decoded[0]).toBeCloseTo(211.25, 4);
+            expect(decoded[1]).toBeCloseTo(1234.5, 4);
+        });
+
+        it('should not read the payload in the platform byte order', () => {
+            const buffer = new ArrayBuffer(4);
+            // Big-endian 211.25 must not decode to 211.25.
+            new DataView(buffer).setFloat32(0, 211.25, false);
+
+            expect(bil32(buffer, 1)[0]).not.toBeCloseTo(211.25, 4);
+        });
+
+        it('should map the no-data value to zero', () => {
+            const decoded = bil32(bilTile([-9999, -9999.5, 12], 4), 2);
+
+            expect(decoded[0]).toBe(0);
+            expect(decoded[1]).toBe(0);
+            expect(decoded[2]).toBeCloseTo(12, 4);
+        });
+
+        it('should keep ground at sea level above the no-data threshold', () => {
+            // The renderer drops every sample <= 0, so a shoreline sitting at zero
+            // would be punched out of the tile without this clamp.
+            const decoded = bil32(bilTile([0, -0.4], 4), 2);
+
+            expect(decoded[0]).toBeGreaterThan(0);
+            expect(decoded[0]).toBeLessThan(0.1);
+            expect(decoded[1]).toBeGreaterThan(0);
+        });
+
+        it('should leave the tail as no-data when the payload is short', () => {
+            const decoded = bil32(bilTile([300, 301], 2), 2);
+
+            expect(decoded).toHaveLength(4);
+            expect(decoded[0]).toBeCloseTo(300, 4);
+            expect(decoded[2]).toBe(0);
+            expect(decoded[3]).toBe(0);
+        });
     });
 
     describe('Max native zoom', () => {
@@ -386,6 +477,20 @@ describe('L.GridLayer.Relief', () => {
             expect(L.GridLayer.Relief.elevationMaxNativeZooms.mapterhorn).toBe(17);
             expect(L.GridLayer.Relief.elevationMaxNativeZooms.terrarium).toBe(15);
             expect(L.GridLayer.Relief.elevationMaxNativeZooms.mapbox).toBe(15);
+            expect(L.GridLayer.Relief.elevationMaxNativeZooms.ignLidarHd).toBe(17);
+        });
+
+        it('should use the IGN max native zoom for both LiDAR HD layers', () => {
+            expect(
+                L.gridLayer.relief({
+                    elevationUrl: L.GridLayer.Relief.elevationUrls.ignLidarHdMnt,
+                }).options.maxNativeZoom
+            ).toBe(17);
+            expect(
+                L.gridLayer.relief({
+                    elevationUrl: L.GridLayer.Relief.elevationUrls.ignLidarHdMns,
+                }).options.maxNativeZoom
+            ).toBe(17);
         });
 
         it('should default to the mapterhorn max native zoom', () => {
@@ -427,6 +532,11 @@ describe('L.GridLayer.Relief', () => {
         it('should have mapterhorn attribution', () => {
             expect(L.GridLayer.Relief.elevationAttributions.mapterhorn).toBeDefined();
             expect(L.GridLayer.Relief.elevationAttributions.mapterhorn).toContain('mapterhorn.com');
+        });
+
+        it('should have IGN LiDAR HD attribution', () => {
+            expect(L.GridLayer.Relief.elevationAttributions.ignLidarHd).toBeDefined();
+            expect(L.GridLayer.Relief.elevationAttributions.ignLidarHd).toContain('IGN');
         });
     });
 
@@ -1351,6 +1461,62 @@ describe('L.GridLayer.Relief', () => {
         afterEach(() => {
             global.fetch = defaultFetch;
             HTMLCanvasElement.prototype.getContext = defaultGetContext;
+        });
+
+        it('should decode a binary DEM without going through an image decoder', async () => {
+            const buffer = new ArrayBuffer(4);
+            new DataView(buffer).setFloat32(0, 750.5, true);
+            const requested: string[] = [];
+            global.fetch = vi.fn((tileUrl: string) => {
+                requested.push(tileUrl);
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    arrayBuffer: () => Promise.resolve(buffer),
+                    blob: () => {
+                        throw new Error('binary DEMs must not be decoded as images');
+                    },
+                });
+            }) as any;
+
+            const decoder = vi.fn(() => new Float32Array(256 * 256).fill(750.5));
+            const layer = L.gridLayer.relief({
+                elevationUrl: url,
+                elevationTileDecoder: decoder,
+            }) as any;
+            const done = vi.fn();
+
+            layer.createTile({ x: 3903, y: 2709, z: 13 } as L.Coords, done);
+            await flush();
+
+            expect(requested).toEqual(['https://example.com/13/3903/2709.png']);
+            expect(decoder).toHaveBeenCalledWith(buffer, 256);
+            expect(done).toHaveBeenCalledWith(undefined, expect.anything());
+        });
+
+        it('should not walk up to parent tiles when a decoder is set', async () => {
+            // A WMS answers 200 with a no-data grid rather than 404, so the walk-up
+            // would only burn requests; the parent resampler also only reads RGBA.
+            const urls: string[] = [];
+            global.fetch = vi.fn((tileUrl: string) => {
+                urls.push(tileUrl);
+                return Promise.resolve({
+                    ok: false,
+                    status: 404,
+                    arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+                });
+            }) as any;
+
+            const layer = L.gridLayer.relief({
+                elevationUrl: url,
+                elevationFallbackDepth: 5,
+                elevationTileDecoder: L.GridLayer.Relief.elevationTileDecoders.bil32,
+            }) as any;
+
+            layer.createTile({ x: 3903, y: 2709, z: 13 } as L.Coords, vi.fn());
+            await flush();
+
+            expect(urls).toEqual(['https://example.com/13/3903/2709.png']);
         });
 
         it('should default the fallback depth to 5 parent levels', () => {

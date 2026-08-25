@@ -305,6 +305,8 @@
             <select id="sourceSelect">
                 <option value="mapterhorn">Mapterhorn (z17)</option>
                 <option value="terrarium">AWS Terrarium (z15)</option>
+                <option value="ignLidarHdMnt">IGN LiDAR HD - MNT (France, z17)</option>
+                <option value="ignLidarHdMns">IGN LiDAR HD - MNS (France, z17)</option>
             </select>
 
             <label for="fallbackSlider">Fallback Depth:</label>
@@ -520,6 +522,17 @@
                 url: L.GridLayer.Relief.elevationUrls.terrarium,
                 extractor: L.GridLayer.Relief.elevationExtractors.terrarium,
                 attribution: L.GridLayer.Relief.elevationAttributions.terrarium
+            },
+            // Raw float32 elevations from IGN's WMS: France only, blank elsewhere.
+            ignLidarHdMnt: {
+                url: L.GridLayer.Relief.elevationUrls.ignLidarHdMnt,
+                decoder: L.GridLayer.Relief.elevationTileDecoders.bil32,
+                attribution: L.GridLayer.Relief.elevationAttributions.ignLidarHd
+            },
+            ignLidarHdMns: {
+                url: L.GridLayer.Relief.elevationUrls.ignLidarHdMns,
+                decoder: L.GridLayer.Relief.elevationTileDecoders.bil32,
+                attribution: L.GridLayer.Relief.elevationAttributions.ignLidarHd
             }
         };
 
@@ -553,7 +566,10 @@
                 reliefLayer = L.gridLayer.relief({
                     mode: mode,
                     elevationUrl: source.url,
-                    elevationExtractor: source.extractor,
+                    // Leaflet copies every key, so an absent one must be omitted
+                    // rather than passed as undefined over the layer's default.
+                    ...(source.extractor ? { elevationExtractor: source.extractor } : {}),
+                    ...(source.decoder ? { elevationTileDecoder: source.decoder } : {}),
                     attribution: source.attribution,
                     elevationFallbackDepth: parseInt(fallbackSlider.value),
                     hillshadeAzimuth: parseInt(azimuthSlider.value),

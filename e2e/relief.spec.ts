@@ -121,6 +121,28 @@ test.describe('Leaflet Relief Plugin E2E Tests', () => {
         );
     });
 
+    test('should switch to the IGN LiDAR HD sources', async ({ page }) => {
+        const consoleErrors: string[] = [];
+        page.on('console', msg => {
+            if (msg.type() === 'error') {
+                consoleErrors.push(msg.text());
+            }
+        });
+
+        for (const source of ['ignLidarHdMnt', 'ignLidarHdMns']) {
+            await page.selectOption('#sourceSelect', source);
+            await page.waitForTimeout(2000);
+
+            const tileCount = await page.locator('.leaflet-tile-container canvas').count();
+            expect(tileCount).toBeGreaterThan(0);
+            await expect(page.locator('.leaflet-control-attribution')).toContainText(
+                'IGN LiDAR HD'
+            );
+        }
+
+        expect(consoleErrors).toEqual([]);
+    });
+
     test('should toggle relief layer visibility', async ({ page }) => {
         // Initially should show "Hide Relief"
         await expect(page.locator('#toggleBtn')).toHaveText('Hide Relief');

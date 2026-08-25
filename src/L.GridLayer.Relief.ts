@@ -13,16 +13,23 @@ declare global {
                 static elevationUrls: {
                     terrarium: ElevationUrlFunction;
                     mapterhorn: string;
+                    ignLidarHdMnt: ElevationUrlFunction;
+                    ignLidarHdMns: ElevationUrlFunction;
+                };
+                static elevationTileDecoders: {
+                    bil32: ElevationTileDecoder;
                 };
                 static elevationAttributions: {
                     terrarium: string;
                     mapbox: string;
                     mapterhorn: string;
+                    ignLidarHd: string;
                 };
                 static elevationMaxNativeZooms: {
                     terrarium: number;
                     mapbox: number;
                     mapterhorn: number;
+                    ignLidarHd: number;
                 };
                 options: ReliefOptions;
                 // Private methods
@@ -31,7 +38,7 @@ declare global {
                 _getElevation(tileData: ElevationTileData, j: number, i: number): number;
                 _getZ(tileData: ElevationTileData, i: number, j: number): number[];
 
-                _buildElevationUrl(z: number, x: number, y: number): string;
+                _buildElevationUrl(z: number, x: number, y: number, tileSize: number): string;
                 _rememberMissingTile(url: string): void;
                 _fetchDemData(
                     coords: L.Coords,
@@ -147,13 +154,19 @@ export interface ReliefOptions extends L.GridLayerOptions {
     tricolorExaggeration?: number;
     elevationUrl?: string | ElevationUrlFunction;
     elevationExtractor?: ElevationExtractorFunction;
+    elevationTileDecoder?: ElevationTileDecoder;
     elevationFallbackDepth?: number;
 }
 
 export type HillshadeColorFunction = (intensity: number) => [number, number, number];
 export type SlopeColorFunction = (slopeDegrees: number) => [number, number, number];
-export type ElevationUrlFunction = (z: number, x: number, y: number) => string;
+export type ElevationUrlFunction = (z: number, x: number, y: number, tileSize: number) => string;
 export type ElevationExtractorFunction = (r: number, g: number, b: number, a: number) => number;
+
+// Decodes a whole DEM tile served in a binary format no image decoder understands
+// (IGN's BIL float32, for instance) into metres. Set `elevationTileDecoder` and the
+// fetch path skips the canvas entirely, handing the grid straight to the renderer.
+export type ElevationTileDecoder = (buffer: ArrayBuffer, tileSize: number) => Float32Array;
 
 type ColorFunction = (zData: number[]) => [number, number, number, number];
 
@@ -248,6 +261,9 @@ const _elevationMaxNativeZooms = {
     terrarium: 15,
     mapbox: 15,
     mapterhorn: 17,
+    // LiDAR HD is gridded at 1 m. At 45N a z17 pixel is 0.84 m, the closest level
+    // that does not oversample the source; deeper zooms are upscaled by Leaflet.
+    ignLidarHd: 17,
 };
 
 const _defaultElevationUrl: ElevationUrlFunction = function (
@@ -266,6 +282,12 @@ const _defaultMaxNativeZoom = function (
     }
     if (elevationUrl === _defaultElevationUrl) {
         return _elevationMaxNativeZooms.terrarium;
+    }
+    if (
+        elevationUrl === _ignLidarHdMntElevationUrl ||
+        elevationUrl === _ignLidarHdMnsElevationUrl
+    ) {
+        return _elevationMaxNativeZooms.ignLidarHd;
     }
     return undefined;
 };
@@ -287,6 +309,79 @@ const _mapboxElevationExtractor: ElevationExtractorFunction = function (
 ): number {
     return -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
 };
+
+// ====================== IGN LIDAR HD (BIL FLOAT32) ======================
+
+// IGN publishes its LiDAR HD terrain and surface models as raw float32 elevations.
+// The WMTS service only serves a pre-computed hillshade, so the DEM has to come from
+// the raster WMS: `image/x-bil;bits=32`, one little-endian float per pixel, no header,
+// rows running north to south like the canvas we render into.
+const _IGN_WMS_URL = 'https://data.geopf.fr/wms-r/wms';
+const _IGN_LIDAR_HD_MNT_LAYER = 'IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G';
+const _IGN_LIDAR_HD_MNS_LAYER = 'IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G';
+
+// Samples outside the surveyed area come back as -9999. The threshold is loose so a
+// float that lost precision on the way still reads as no-data.
+const _BIL_NO_DATA_THRESHOLD = -9000;
+
+// The renderer treats every sample <= 0 as no-data, so real ground sitting exactly at
+// sea level (the Camargue, Corsican and Mediterranean shorelines) has to be nudged
+// above zero. A centimetre is far below the accuracy of the source and invisible once
+// shaded, whereas dropping those pixels would punch holes in the coast.
+const _BIL_MIN_ELEVATION = 0.01;
+
+const _bil32ElevationDecoder: ElevationTileDecoder = function (
+    buffer: ArrayBuffer,
+    tileSize: number
+): Float32Array {
+    const elevations = new Float32Array(tileSize * tileSize);
+    const view = new DataView(buffer);
+    // A short read leaves the tail at 0, which the renderer reads as no-data.
+    const sampleCount = Math.min(elevations.length, Math.floor(buffer.byteLength / 4));
+
+    for (let i = 0; i < sampleCount; i++) {
+        // Explicit little-endian: the payload's byte order is fixed by the service,
+        // not by the platform a Float32Array view would follow.
+        const value = view.getFloat32(i * 4, true);
+        elevations[i] = value <= _BIL_NO_DATA_THRESHOLD ? 0 : Math.max(value, _BIL_MIN_ELEVATION);
+    }
+
+    return elevations;
+};
+
+// Northern edge of tile row `y`, in degrees: the inverse of the Web Mercator
+// latitude projection Leaflet lays its grid on.
+const _tileNorthLatitude = function (y: number, z: number): number {
+    return (180 / Math.PI) * Math.atan(Math.sinh(Math.PI - (2 * Math.PI * y) / Math.pow(2, z)));
+};
+
+// Build a WMS GetMap request covering exactly one XYZ tile.
+//
+// The request is made in EPSG:4326, not EPSG:3857: the service does accept the latter,
+// but resamples it one row out of two, which shows up as horizontal banding across the
+// hillshade. Sampling the same footprint linearly in latitude instead of in Mercator y
+// shifts rows by a small fraction of a pixel (~0.003 px at z16), far below the accuracy
+// of the source, whereas the duplicated rows double the vertical gradient.
+//
+// WMS 1.3.0 orders EPSG:4326 axes latitude first, so BBOX reads south,west,north,east.
+const _ignLidarHdElevationUrl = function (layer: string): ElevationUrlFunction {
+    return function (z: number, x: number, y: number, tileSize: number): string {
+        const tiles = Math.pow(2, z);
+        const west = (x / tiles) * 360 - 180;
+        const east = ((x + 1) / tiles) * 360 - 180;
+        const bbox = [_tileNorthLatitude(y + 1, z), west, _tileNorthLatitude(y, z), east].join(',');
+
+        return (
+            `${_IGN_WMS_URL}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap` +
+            `&LAYERS=${layer}&STYLES=normal&CRS=EPSG:4326` +
+            `&BBOX=${bbox}&WIDTH=${tileSize}&HEIGHT=${tileSize}` +
+            `&FORMAT=${encodeURIComponent('image/x-bil;bits=32')}`
+        );
+    };
+};
+
+const _ignLidarHdMntElevationUrl = _ignLidarHdElevationUrl(_IGN_LIDAR_HD_MNT_LAYER);
+const _ignLidarHdMnsElevationUrl = _ignLidarHdElevationUrl(_IGN_LIDAR_HD_MNS_LAYER);
 
 const _getDzdx = function (z: number[], divider: number): number {
     return (z[2] + 2 * z[5] + z[8] - (z[0] + 2 * z[3] + z[6])) / (8 * divider);
@@ -866,9 +961,9 @@ const ReliefLayerClass = L.GridLayer.extend({
         );
     },
 
-    _buildElevationUrl: function (z: number, x: number, y: number): string {
+    _buildElevationUrl: function (z: number, x: number, y: number, tileSize: number): string {
         return typeof this.options.elevationUrl === 'function'
-            ? this.options.elevationUrl(z, x, y)
+            ? this.options.elevationUrl(z, x, y, tileSize)
             : this.options.elevationUrl
                   .replace('{z}', z.toString())
                   .replace('{x}', x.toString())
@@ -899,12 +994,19 @@ const ReliefLayerClass = L.GridLayer.extend({
         demCtx: CanvasRenderingContext2D,
         abortSignal: AbortSignal
     ): Promise<ElevationTileData | null> {
-        const maxDepth = Math.max(0, Math.floor(this.options.elevationFallbackDepth || 0));
+        const decoder: ElevationTileDecoder | undefined = this.options.elevationTileDecoder;
+        // A decoded source is served by a WMS, which answers 200 with a no-data grid
+        // rather than 404 outside its coverage: no ancestor would ever be probed, and
+        // the parent resampler only speaks RGBA anyway.
+        const maxDepth = decoder
+            ? 0
+            : Math.max(0, Math.floor(this.options.elevationFallbackDepth || 0));
         const ancestorUrl = (depth: number): string =>
             this._buildElevationUrl(
                 coords.z - depth,
                 Math.floor(coords.x / Math.pow(2, depth)),
-                Math.floor(coords.y / Math.pow(2, depth))
+                Math.floor(coords.y / Math.pow(2, depth)),
+                tileSize
             );
 
         // A tile pyramid never has data at a zoom whose parent has none, so a known
@@ -927,7 +1029,7 @@ const ReliefLayerClass = L.GridLayer.extend({
             const scale = Math.pow(2, depth);
             const sourceX = Math.floor(coords.x / scale);
             const sourceY = Math.floor(coords.y / scale);
-            const url = this._buildElevationUrl(sourceZ, sourceX, sourceY);
+            const url = this._buildElevationUrl(sourceZ, sourceX, sourceY, tileSize);
 
             const response = await fetch(url, { signal: abortSignal });
             if (_isMissingTileStatus(response.status)) {
@@ -936,6 +1038,10 @@ const ReliefLayerClass = L.GridLayer.extend({
             }
             if (!response.ok) {
                 throw new Error(`Failed to fetch tile: ${response.status}`);
+            }
+
+            if (decoder) {
+                return decoder(await response.arrayBuffer(), tileSize);
             }
 
             const demBlob = await response.blob();
@@ -1158,6 +1264,12 @@ L.GridLayer.Relief.elevationExtractors = {
 L.GridLayer.Relief.elevationUrls = {
     terrarium: _defaultElevationUrl,
     mapterhorn: _mapterhornElevationUrl,
+    ignLidarHdMnt: _ignLidarHdMntElevationUrl,
+    ignLidarHdMns: _ignLidarHdMnsElevationUrl,
+};
+
+L.GridLayer.Relief.elevationTileDecoders = {
+    bil32: _bil32ElevationDecoder,
 };
 
 L.GridLayer.Relief.elevationMaxNativeZooms = _elevationMaxNativeZooms;
@@ -1168,5 +1280,7 @@ L.GridLayer.Relief.elevationAttributions = {
     mapbox: '&copy; <a href="https://www.mapbox.com/about/maps/" target="_blank">Mapbox</a>',
     mapterhorn:
         '&copy; <a href="https://mapterhorn.com/attribution/" target="_blank">Mapterhorn</a>',
+    ignLidarHd:
+        '&copy; <a href="https://geoservices.ign.fr/lidarhd" target="_blank">IGN LiDAR HD</a>',
 };
 // Types are already exported above - no need to re-export

@@ -26,26 +26,47 @@ var t = 40075017, n = [
 }, i = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp", a = {
 	terrarium: 15,
 	mapbox: 15,
-	mapterhorn: 17
+	mapterhorn: 17,
+	ignLidarHd: 17
 }, o = function(e, t, n) {
 	return `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${e}/${t}/${n}.png`;
 }, s = function(e) {
 	if (e === i) return a.mapterhorn;
 	if (e === o) return a.terrarium;
+	if (e === v || e === y) return a.ignLidarHd;
 }, c = function(e, t, n, r) {
 	return e * 256 + t + n / 256 - 32768;
 }, l = function(e, t, n, r) {
 	return -1e4 + (e * 256 * 256 + t * 256 + n) * .1;
-}, u = function(e, t) {
+}, u = "https://data.geopf.fr/wms-r/wms", d = "IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G", f = "IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G", p = -9e3, m = .01, h = function(e, t) {
+	let n = new Float32Array(t * t), r = new DataView(e), i = Math.min(n.length, Math.floor(e.byteLength / 4));
+	for (let e = 0; e < i; e++) {
+		let t = r.getFloat32(e * 4, !0);
+		n[e] = t <= p ? 0 : Math.max(t, m);
+	}
+	return n;
+}, g = function(e, t) {
+	return 180 / Math.PI * Math.atan(Math.sinh(Math.PI - 2 * Math.PI * e / 2 ** t));
+}, _ = function(e) {
+	return function(t, n, r, i) {
+		let a = 2 ** t, o = n / a * 360 - 180, s = (n + 1) / a * 360 - 180;
+		return `${u}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${e}&STYLES=normal&CRS=EPSG:4326&BBOX=${[
+			g(r + 1, t),
+			o,
+			g(r, t),
+			s
+		].join(",")}&WIDTH=${i}&HEIGHT=${i}&FORMAT=image%2Fx-bil%3Bbits%3D32`;
+	};
+}, v = _(d), y = _(f), b = function(e, t) {
 	return (e[2] + 2 * e[5] + e[8] - (e[0] + 2 * e[3] + e[6])) / (8 * t);
-}, d = function(e, t) {
+}, x = function(e, t) {
 	return (e[0] + 2 * e[1] + e[2] - (e[6] + 2 * e[7] + e[8])) / (8 * t);
-}, f = function(e, n, r) {
+}, S = function(e, n, r) {
 	let i = Math.PI - 2 * Math.PI * e / 2 ** n, a = Math.atan(.5 * (Math.exp(i) - Math.exp(-i))), o = t / (r * 2 ** n), s = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, a));
 	return Math.max(.1, o * Math.cos(s));
-}, p = 5, m = 2048, h = function(e) {
+}, C = 5, w = 2048, T = function(e) {
 	return e === 404 || e === 403 || e === 204;
-}, g = function(e, t, n, r, i, a, o) {
+}, E = function(e, t, n, r, i, a, o) {
 	let s = a - r + 1, c = new Float32Array(s * (o - i + 1));
 	for (let l = i; l <= o; l++) {
 		let o = (l - i) * s;
@@ -55,8 +76,8 @@ var t = 40075017, n = [
 		}
 	}
 	return c;
-}, _ = function(e, t, n, r, i, a) {
-	let o = new Float32Array(t * t), s = t - 1, c = (e) => Math.max(0, Math.min(s, e)), l = t / i, u = c(Math.floor(n - .5)), d = c(Math.floor(n + l - .5) + 1), f = c(Math.floor(r - .5)), p = c(Math.floor(r + l - .5) + 1), m = d - u + 1, h = g(e, t, a, u, f, d, p);
+}, D = function(e, t, n, r, i, a) {
+	let o = new Float32Array(t * t), s = t - 1, c = (e) => Math.max(0, Math.min(s, e)), l = t / i, u = c(Math.floor(n - .5)), d = c(Math.floor(n + l - .5) + 1), f = c(Math.floor(r - .5)), p = c(Math.floor(r + l - .5) + 1), m = d - u + 1, h = E(e, t, a, u, f, d, p);
 	for (let e = 0; e < t; e++) {
 		let a = r + (e + .5) / i - .5, l = c(Math.floor(a)), d = Math.min(s, l + 1), p = Math.max(0, Math.min(1, a - l)), g = (l - f) * m, _ = (d - f) * m;
 		for (let r = 0; r < t; r++) {
@@ -70,27 +91,27 @@ var t = 40075017, n = [
 		}
 	}
 	return o;
-}, v = function(e, t, n, r, i) {
+}, O = function(e, t, n, r, i) {
 	let a = (n - r * e - i * t) / Math.sqrt(1 + e ** 2 + t ** 2);
 	return a < 0 ? 0 : a;
-}, y = function(e, t, n, r) {
-	let i = v(u(e, n) * r, d(e, n) * r, t.hillshadeA1, t.hillshadeA2, t.hillshadeA3);
+}, k = function(e, t, n, r) {
+	let i = O(b(e, n) * r, x(e, n) * r, t.hillshadeA1, t.hillshadeA2, t.hillshadeA3);
 	return Math.sqrt(i * .8 + .2);
-}, b = function(e, t, n, r, i, a) {
-	let o = u(e, t) * n, s = d(e, t) * n, c = 0;
-	for (let e = 0; e < i.length; e++) c += v(o, s, r, i[e], a[e]);
+}, A = function(e, t, n, r, i, a) {
+	let o = b(e, t) * n, s = x(e, t) * n, c = 0;
+	for (let e = 0; e < i.length; e++) c += O(o, s, r, i[e], a[e]);
 	let l = r * i.length;
 	return l > 0 ? c / l : 0;
-}, x = function(e) {
+}, j = function(e) {
 	let t = Math.round(e * 255);
 	return [
 		t,
 		t,
 		t
 	];
-}, S = .9, C = function(e, t) {
+}, M = .9, N = function(e, t) {
 	return (e[4] - (e[0] + e[1] + e[2] + e[3] + e[5] + e[6] + e[7] + e[8]) / 8) / t;
-}, w = {
+}, P = {
 	default: {
 		warm: [
 			236,
@@ -142,10 +163,10 @@ var t = 40075017, n = [
 			193
 		]
 	}
-}, T = function(e, t) {
-	let n = u(e, t), r = d(e, t);
+}, F = function(e, t) {
+	let n = b(e, t), r = x(e, t);
 	return Math.atan(Math.sqrt(n * n + r * r)) * 180 / Math.PI;
-}, E = (e, t, n) => {
+}, I = (e, t, n) => {
 	for (; e < 0;) e += 360;
 	for (; e > 360;) e -= 360;
 	e /= 60;
@@ -180,7 +201,7 @@ var t = 40075017, n = [
 		Math.round((c + a) * 255),
 		255
 	];
-}, D = [
+}, L = [
 	{
 		slope: {
 			min: 0,
@@ -221,8 +242,8 @@ var t = 40075017, n = [
 			max: -60
 		}
 	}
-], O = {
-	default: D,
+], R = {
+	default: L,
 	glacial: [
 		{
 			slope: {
@@ -359,30 +380,30 @@ var t = 40075017, n = [
 			}
 		}
 	]
-}, k = function(e) {
+}, z = function(e) {
 	return function(t) {
-		if (t < e[0].slope.min) return E(e[0].h.min, 1, 1).slice(0, 3);
+		if (t < e[0].slope.min) return I(e[0].h.min, 1, 1).slice(0, 3);
 		for (let n = 0; n < e.length; n++) {
 			let r = e[n];
 			if (t >= r.slope.min && t <= r.slope.max) {
 				let e = (t - r.slope.min) / (r.slope.max - r.slope.min);
-				return E(r.h.min + e * (r.h.max - r.h.min), 1, 1).slice(0, 3);
+				return I(r.h.min + e * (r.h.max - r.h.min), 1, 1).slice(0, 3);
 			}
 		}
 		let n = e[e.length - 1];
-		return E(n.h.max, 1, 1).slice(0, 3);
+		return I(n.h.max, 1, 1).slice(0, 3);
 	};
-}, A = e.GridLayer.extend({
+}, B = e.GridLayer.extend({
 	options: {
 		mode: "hillshade",
 		elevationUrl: i,
 		elevationExtractor: c,
-		elevationFallbackDepth: p,
+		elevationFallbackDepth: C,
 		hillshadeAzimuth: 315,
 		hillshadeElevation: 45,
 		hillshadeExaggeration: 1,
-		hillshadeColorFunction: x,
-		slopeColorFunction: k(D),
+		hillshadeColorFunction: j,
+		slopeColorFunction: z(L),
 		archeoAzimuths: [
 			225,
 			270,
@@ -392,9 +413,9 @@ var t = 40075017, n = [
 		archeoElevation: 45,
 		archeoExaggeration: 3,
 		archeoGlowStrength: 15,
-		archeoWarmColor: w.default.warm,
-		archeoCoolColor: w.default.cool,
-		archeoBaseColor: w.default.base,
+		archeoWarmColor: P.default.warm,
+		archeoCoolColor: P.default.cool,
+		archeoBaseColor: P.default.base,
 		tricolorAzimuths: [
 			315,
 			15,
@@ -417,8 +438,8 @@ var t = 40075017, n = [
 			tricolorA3: [],
 			abortControllers: new globalThis.Map(),
 			missingTiles: /* @__PURE__ */ new Set()
-		}, t && t.slopeColorConfig ? t.slopeColorFunction = k(t.slopeColorConfig) : t && t.slopeColorScheme && (t.slopeColorFunction = k(O[t.slopeColorScheme] || O.default)), t && t.archeoColorScheme) {
-			let e = w[t.archeoColorScheme] || w.default;
+		}, t && t.slopeColorConfig ? t.slopeColorFunction = z(t.slopeColorConfig) : t && t.slopeColorScheme && (t.slopeColorFunction = z(R[t.slopeColorScheme] || R.default)), t && t.archeoColorScheme) {
+			let e = P[t.archeoColorScheme] || P.default;
 			t.archeoWarmColor ||= e.warm, t.archeoCoolColor ||= e.cool, t.archeoBaseColor ||= e.base;
 		}
 		e.Util.setOptions(this, t), (!t || t.maxNativeZoom === void 0) && (this.options.maxNativeZoom = s(this.options.elevationUrl)), this._recomputeHillshadeConstants(), this._recomputeArcheoConstants(), this._recomputeTricolorConstants(), this.on("tileunload", function(e) {
@@ -477,7 +498,7 @@ var t = 40075017, n = [
 		}
 	},
 	_createHillshadeColor: function(e, t) {
-		let n = y(e, this._state, t, this.options.hillshadeExaggeration), [r, i, a] = this.options.hillshadeColorFunction(n);
+		let n = k(e, this._state, t, this.options.hillshadeExaggeration), [r, i, a] = this.options.hillshadeColorFunction(n);
 		return [
 			r,
 			i,
@@ -486,11 +507,11 @@ var t = 40075017, n = [
 		];
 	},
 	_fillHillshadeTile: function(e, t, n, r) {
-		let i = this.getTileSize().x, a = f(n.y, n.z, i);
+		let i = this.getTileSize().x, a = S(n.y, n.z, i);
 		this._doFillTile(e, t, (e) => this._createHillshadeColor(e, a), r);
 	},
 	_createSlopeColor: function(e, t) {
-		let r = T(e, t);
+		let r = F(e, t);
 		if (r < .5) return n;
 		{
 			let e = this.options.slopeColorFunction(r);
@@ -503,50 +524,51 @@ var t = 40075017, n = [
 		}
 	},
 	_fillSlopeTile: function(e, t, n, r) {
-		let i = n.y, a = n.z, o = this.getTileSize().x, s = f(i, a, o);
+		let i = n.y, a = n.z, o = this.getTileSize().x, s = S(i, a, o);
 		this._doFillTile(e, t, (e) => this._createSlopeColor(e, s), r);
 	},
-	_buildElevationUrl: function(e, t, n) {
-		return typeof this.options.elevationUrl == "function" ? this.options.elevationUrl(e, t, n) : this.options.elevationUrl.replace("{z}", e.toString()).replace("{x}", t.toString()).replace("{y}", n.toString());
+	_buildElevationUrl: function(e, t, n, r) {
+		return typeof this.options.elevationUrl == "function" ? this.options.elevationUrl(e, t, n, r) : this.options.elevationUrl.replace("{z}", e.toString()).replace("{x}", t.toString()).replace("{y}", n.toString());
 	},
 	_rememberMissingTile: function(e) {
 		let t = this._state.missingTiles;
-		if (t.size >= m) {
+		if (t.size >= w) {
 			let e = t.values().next().value;
 			e !== void 0 && t.delete(e);
 		}
 		t.add(e);
 	},
 	_fetchDemData: async function(e, t, n, r) {
-		let i = Math.max(0, Math.floor(this.options.elevationFallbackDepth || 0)), a = (t) => this._buildElevationUrl(e.z - t, Math.floor(e.x / 2 ** t), Math.floor(e.y / 2 ** t)), o = 0;
-		for (let t = i; t >= 0; t--) if (e.z - t >= 0 && this._state.missingTiles.has(a(t))) {
-			o = t + 1;
+		let i = this.options.elevationTileDecoder, a = i ? 0 : Math.max(0, Math.floor(this.options.elevationFallbackDepth || 0)), o = (n) => this._buildElevationUrl(e.z - n, Math.floor(e.x / 2 ** n), Math.floor(e.y / 2 ** n), t), s = 0;
+		for (let t = a; t >= 0; t--) if (e.z - t >= 0 && this._state.missingTiles.has(o(t))) {
+			s = t + 1;
 			break;
 		}
-		for (let a = o; a <= i; a++) {
-			let i = e.z - a;
-			if (i < 0) break;
-			let o = 2 ** a, s = Math.floor(e.x / o), c = Math.floor(e.y / o), l = this._buildElevationUrl(i, s, c), u = await fetch(l, { signal: r });
-			if (h(u.status)) {
-				this._rememberMissingTile(l);
+		for (let o = s; o <= a; o++) {
+			let a = e.z - o;
+			if (a < 0) break;
+			let s = 2 ** o, c = Math.floor(e.x / s), l = Math.floor(e.y / s), u = this._buildElevationUrl(a, c, l, t), d = await fetch(u, { signal: r });
+			if (T(d.status)) {
+				this._rememberMissingTile(u);
 				continue;
 			}
-			if (!u.ok) throw Error(`Failed to fetch tile: ${u.status}`);
-			let d = await u.blob(), f = await createImageBitmap(d);
+			if (!d.ok) throw Error(`Failed to fetch tile: ${d.status}`);
+			if (i) return i(await d.arrayBuffer(), t);
+			let f = await d.blob(), p = await createImageBitmap(f);
 			try {
-				n.imageSmoothingEnabled = !1, n.drawImage(f, 0, 0, t, t);
+				n.imageSmoothingEnabled = !1, n.drawImage(p, 0, 0, t, t);
 			} finally {
-				f.close();
+				p.close();
 			}
-			let p = n.getImageData(0, 0, t, t).data;
-			if (a === 0) return p;
-			let m = t / o;
-			return _(p, t, (e.x - s * o) * m, (e.y - c * o) * m, o, this.options.elevationExtractor);
+			let m = n.getImageData(0, 0, t, t).data;
+			if (o === 0) return m;
+			let h = t / s;
+			return D(m, t, (e.x - c * s) * h, (e.y - l * s) * h, s, this.options.elevationExtractor);
 		}
 		return null;
 	},
 	_createArcheoColor: function(e, t) {
-		let n = b(e, t, this.options.archeoExaggeration, this._state.archeoA1, this._state.archeoA2, this._state.archeoA3), r = Math.tanh(this.options.archeoGlowStrength * C(e, t)), i = Math.abs(r) * S, a = r > 0 ? this.options.archeoWarmColor : this.options.archeoCoolColor, o = this.options.archeoBaseColor;
+		let n = A(e, t, this.options.archeoExaggeration, this._state.archeoA1, this._state.archeoA2, this._state.archeoA3), r = Math.tanh(this.options.archeoGlowStrength * N(e, t)), i = Math.abs(r) * M, a = r > 0 ? this.options.archeoWarmColor : this.options.archeoCoolColor, o = this.options.archeoBaseColor;
 		return [
 			Math.round(n * ((1 - i) * o[0] + i * a[0])),
 			Math.round(n * ((1 - i) * o[1] + i * a[1])),
@@ -555,24 +577,24 @@ var t = 40075017, n = [
 		];
 	},
 	_fillArcheoTile: function(e, t, n, r) {
-		let i = this.getTileSize().x, a = f(n.y, n.z, i);
+		let i = this.getTileSize().x, a = S(n.y, n.z, i);
 		this._doFillTile(e, t, (e) => this._createArcheoColor(e, a), r);
 	},
 	_createTricolorColor: function(e, t) {
-		let n = this.options.tricolorExaggeration, r = u(e, t) * n, i = d(e, t) * n, a = [
+		let n = this.options.tricolorExaggeration, r = b(e, t) * n, i = x(e, t) * n, a = [
 			0,
 			0,
 			0,
 			255
 		];
 		for (let e = 0; e < 3; e++) {
-			let t = v(r, i, this._state.tricolorA1, this._state.tricolorA2[e], this._state.tricolorA3[e]);
+			let t = O(r, i, this._state.tricolorA1, this._state.tricolorA2[e], this._state.tricolorA3[e]);
 			a[e] = Math.round(255 * t);
 		}
 		return a;
 	},
 	_fillTricolorTile: function(e, t, n, r) {
-		let i = this.getTileSize().x, a = f(n.y, n.z, i);
+		let i = this.getTileSize().x, a = S(n.y, n.z, i);
 		this._doFillTile(e, t, (e) => this._createTricolorColor(e, a), r);
 	},
 	_tileUnloaded: function(e) {
@@ -611,7 +633,7 @@ var t = 40075017, n = [
 		this._tileUnloaded(e);
 	}
 });
-e.GridLayer.Relief = A, e.gridLayer.relief = function(t) {
+e.GridLayer.Relief = B, e.gridLayer.relief = function(t) {
 	return new e.GridLayer.Relief(t);
 }, e.GridLayer.Relief.elevationExtractors = {
 	terrarium: c,
@@ -619,11 +641,14 @@ e.GridLayer.Relief = A, e.gridLayer.relief = function(t) {
 	mapterhorn: c
 }, e.GridLayer.Relief.elevationUrls = {
 	terrarium: o,
-	mapterhorn: i
-}, e.GridLayer.Relief.elevationMaxNativeZooms = a, e.GridLayer.Relief.elevationAttributions = {
+	mapterhorn: i,
+	ignLidarHdMnt: v,
+	ignLidarHdMns: y
+}, e.GridLayer.Relief.elevationTileDecoders = { bil32: h }, e.GridLayer.Relief.elevationMaxNativeZooms = a, e.GridLayer.Relief.elevationAttributions = {
 	terrarium: "&copy; <a href=\"https://github.com/tilezen/joerd/blob/master/docs/attribution.md\" target=\"_blank\">Mapzen Elevation</a>",
 	mapbox: "&copy; <a href=\"https://www.mapbox.com/about/maps/\" target=\"_blank\">Mapbox</a>",
-	mapterhorn: "&copy; <a href=\"https://mapterhorn.com/attribution/\" target=\"_blank\">Mapterhorn</a>"
+	mapterhorn: "&copy; <a href=\"https://mapterhorn.com/attribution/\" target=\"_blank\">Mapterhorn</a>",
+	ignLidarHd: "&copy; <a href=\"https://geoservices.ign.fr/lidarhd\" target=\"_blank\">IGN LiDAR HD</a>"
 };
 //#endregion
 
