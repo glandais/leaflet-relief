@@ -23,33 +23,40 @@ var t = 40075017, n = [
 	_trim() {
 		for (; this.available.length > this.idleSize;) this.available.pop();
 	}
-}, i = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp", a = function(e, t, n) {
+}, i = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp", a = {
+	terrarium: 15,
+	mapbox: 15,
+	mapterhorn: 17
+}, o = function(e, t, n) {
 	return `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${e}/${t}/${n}.png`;
-}, o = function(e, t, n, r) {
+}, s = function(e) {
+	if (e === i) return a.mapterhorn;
+	if (e === o) return a.terrarium;
+}, c = function(e, t, n, r) {
 	return e * 256 + t + n / 256 - 32768;
-}, s = function(e, t, n, r) {
+}, l = function(e, t, n, r) {
 	return -1e4 + (e * 256 * 256 + t * 256 + n) * .1;
-}, c = function(e, t) {
+}, u = function(e, t) {
 	return (e[2] + 2 * e[5] + e[8] - (e[0] + 2 * e[3] + e[6])) / (8 * t);
-}, l = function(e, t) {
+}, d = function(e, t) {
 	return (e[0] + 2 * e[1] + e[2] - (e[6] + 2 * e[7] + e[8])) / (8 * t);
-}, u = function(e, n, r) {
+}, f = function(e, n, r) {
 	let i = Math.PI - 2 * Math.PI * e / 2 ** n, a = Math.atan(.5 * (Math.exp(i) - Math.exp(-i))), o = t / (r * 2 ** n), s = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, a));
 	return Math.max(.1, o * Math.cos(s));
-}, d = function(e, t, n, r) {
-	let i = c(e, n) * r, a = l(e, n) * r, o = (t.hillshadeA1 - t.hillshadeA2 * i - t.hillshadeA3 * a) / Math.sqrt(1 + i ** 2 + a ** 2);
+}, p = function(e, t, n, r) {
+	let i = u(e, n) * r, a = d(e, n) * r, o = (t.hillshadeA1 - t.hillshadeA2 * i - t.hillshadeA3 * a) / Math.sqrt(1 + i ** 2 + a ** 2);
 	return o < 0 && (o = 0), o = Math.sqrt(o * .8 + .2), o;
-}, f = function(e) {
+}, m = function(e) {
 	let t = Math.round(e * 255);
 	return [
 		t,
 		t,
 		t
 	];
-}, p = function(e, t) {
-	let n = c(e, t), r = l(e, t);
+}, h = function(e, t) {
+	let n = u(e, t), r = d(e, t);
 	return Math.atan(Math.sqrt(n * n + r * r)) * 180 / Math.PI;
-}, m = (e, t, n) => {
+}, g = (e, t, n) => {
 	for (; e < 0;) e += 360;
 	for (; e > 360;) e -= 360;
 	e /= 60;
@@ -84,7 +91,7 @@ var t = 40075017, n = [
 		Math.round((c + a) * 255),
 		255
 	];
-}, h = [
+}, _ = [
 	{
 		slope: {
 			min: 0,
@@ -125,8 +132,8 @@ var t = 40075017, n = [
 			max: -60
 		}
 	}
-], g = {
-	default: h,
+], v = {
+	default: _,
 	glacial: [
 		{
 			slope: {
@@ -263,29 +270,29 @@ var t = 40075017, n = [
 			}
 		}
 	]
-}, _ = function(e) {
+}, y = function(e) {
 	return function(t) {
-		if (t < e[0].slope.min) return m(e[0].h.min, 1, 1).slice(0, 3);
+		if (t < e[0].slope.min) return g(e[0].h.min, 1, 1).slice(0, 3);
 		for (let n = 0; n < e.length; n++) {
 			let r = e[n];
 			if (t >= r.slope.min && t <= r.slope.max) {
 				let e = (t - r.slope.min) / (r.slope.max - r.slope.min);
-				return m(r.h.min + e * (r.h.max - r.h.min), 1, 1).slice(0, 3);
+				return g(r.h.min + e * (r.h.max - r.h.min), 1, 1).slice(0, 3);
 			}
 		}
 		let n = e[e.length - 1];
-		return m(n.h.max, 1, 1).slice(0, 3);
+		return g(n.h.max, 1, 1).slice(0, 3);
 	};
-}, v = e.GridLayer.extend({
+}, b = e.GridLayer.extend({
 	options: {
 		mode: "hillshade",
 		elevationUrl: i,
-		elevationExtractor: o,
+		elevationExtractor: c,
 		hillshadeAzimuth: 315,
 		hillshadeElevation: 45,
 		hillshadeExaggeration: 1,
-		hillshadeColorFunction: f,
-		slopeColorFunction: _(h),
+		hillshadeColorFunction: m,
+		slopeColorFunction: y(_),
 		attribution: "&copy; <a href=\"https://mapterhorn.com/attribution/\" target=\"_blank\">Mapterhorn</a>"
 	},
 	initialize: function(t) {
@@ -294,7 +301,7 @@ var t = 40075017, n = [
 			hillshadeA2: 0,
 			hillshadeA3: 0,
 			abortControllers: new globalThis.Map()
-		}, t && t.slopeColorConfig ? t.slopeColorFunction = _(t.slopeColorConfig) : t && t.slopeColorScheme && (t.slopeColorFunction = _(g[t.slopeColorScheme] || g.default)), e.Util.setOptions(this, t), this._recomputeHillshadeConstants(), this.on("tileunload", function(e) {
+		}, t && t.slopeColorConfig ? t.slopeColorFunction = y(t.slopeColorConfig) : t && t.slopeColorScheme && (t.slopeColorFunction = y(v[t.slopeColorScheme] || v.default)), e.Util.setOptions(this, t), (!t || t.maxNativeZoom === void 0) && (this.options.maxNativeZoom = s(this.options.elevationUrl)), this._recomputeHillshadeConstants(), this.on("tileunload", function(e) {
 			this._tileUnloaded(e.coords);
 		});
 	},
@@ -340,7 +347,7 @@ var t = 40075017, n = [
 		}
 	},
 	_createHillshadeColor: function(e, t) {
-		let n = d(e, this._state, t, this.options.hillshadeExaggeration), [r, i, a] = this.options.hillshadeColorFunction(n);
+		let n = p(e, this._state, t, this.options.hillshadeExaggeration), [r, i, a] = this.options.hillshadeColorFunction(n);
 		return [
 			r,
 			i,
@@ -349,11 +356,11 @@ var t = 40075017, n = [
 		];
 	},
 	_fillHillshadeTile: function(e, t, n, r) {
-		let i = this.getTileSize().x, a = u(n.y, n.z, i);
+		let i = this.getTileSize().x, a = f(n.y, n.z, i);
 		this._doFillTile(e, t, (e) => this._createHillshadeColor(e, a), r);
 	},
 	_createSlopeColor: function(e, t) {
-		let r = p(e, t);
+		let r = h(e, t);
 		if (r < .5) return n;
 		{
 			let e = this.options.slopeColorFunction(r);
@@ -366,7 +373,7 @@ var t = 40075017, n = [
 		}
 	},
 	_fillSlopeTile: function(e, t, n, r) {
-		let i = n.y, a = n.z, o = this.getTileSize().x, s = u(i, a, o);
+		let i = n.y, a = n.z, o = this.getTileSize().x, s = f(i, a, o);
 		this._doFillTile(e, t, (e) => this._createSlopeColor(e, s), r);
 	},
 	_tileUnloaded: function(e) {
@@ -397,7 +404,7 @@ var t = 40075017, n = [
 				let m = a.getImageData(0, 0, s, s).data;
 				await this._fillTile(u.data, m, e, d.signal), d.signal.aborted || (l.putImageData(u, 0, 0), t(void 0, c));
 			} catch (e) {
-				e instanceof Error && e.name !== "AbortError" && console.error(`Error loading tile ${o}:`, e);
+				d.signal.aborted || e instanceof Error && e.name === "AbortError" || (console.error(`Error loading tile ${o}:`, e), t(e instanceof Error ? e : Error(String(e)), c));
 			} finally {
 				this._state.abortControllers.delete(o), n && n.close(), i && r.release(i);
 			}
@@ -407,16 +414,16 @@ var t = 40075017, n = [
 		this._tileUnloaded(e);
 	}
 });
-e.GridLayer.Relief = v, e.gridLayer.relief = function(t) {
+e.GridLayer.Relief = b, e.gridLayer.relief = function(t) {
 	return new e.GridLayer.Relief(t);
 }, e.GridLayer.Relief.elevationExtractors = {
-	terrarium: o,
-	mapbox: s,
-	mapterhorn: o
+	terrarium: c,
+	mapbox: l,
+	mapterhorn: c
 }, e.GridLayer.Relief.elevationUrls = {
-	terrarium: a,
+	terrarium: o,
 	mapterhorn: i
-}, e.GridLayer.Relief.elevationAttributions = {
+}, e.GridLayer.Relief.elevationMaxNativeZooms = a, e.GridLayer.Relief.elevationAttributions = {
 	terrarium: "&copy; <a href=\"https://github.com/tilezen/joerd/blob/master/docs/attribution.md\" target=\"_blank\">Mapzen Elevation</a>",
 	mapbox: "&copy; <a href=\"https://www.mapbox.com/about/maps/\" target=\"_blank\">Mapbox</a>",
 	mapterhorn: "&copy; <a href=\"https://mapterhorn.com/attribution/\" target=\"_blank\">Mapterhorn</a>"

@@ -19,6 +19,11 @@ declare global {
                     mapbox: string;
                     mapterhorn: string;
                 };
+                static elevationMaxNativeZooms: {
+                    terrarium: number;
+                    mapbox: number;
+                    mapterhorn: number;
+                };
                 options: ReliefOptions;
                 // Private methods
                 _tileUnloaded(coords: L.Coords): void;
@@ -170,12 +175,33 @@ const _canvasPool: CanvasPool = {
 
 const _mapterhornElevationUrl = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
 
+// Deepest zoom each elevation source publishes; beyond it tiles return 404.
+// Used as the default maxNativeZoom so Leaflet upscales the last available tile
+// instead of requesting a level that does not exist (which leaves tiles blank).
+const _elevationMaxNativeZooms = {
+    terrarium: 15,
+    mapbox: 15,
+    mapterhorn: 17,
+};
+
 const _defaultElevationUrl: ElevationUrlFunction = function (
     z: number,
     x: number,
     y: number
 ): string {
     return `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+};
+
+const _defaultMaxNativeZoom = function (
+    elevationUrl: string | ElevationUrlFunction | undefined
+): number | undefined {
+    if (elevationUrl === _mapterhornElevationUrl) {
+        return _elevationMaxNativeZooms.mapterhorn;
+    }
+    if (elevationUrl === _defaultElevationUrl) {
+        return _elevationMaxNativeZooms.terrarium;
+    }
+    return undefined;
 };
 
 const _defaultElevationExtractor: ElevationExtractorFunction = function (
@@ -368,6 +394,14 @@ const ReliefLayerClass = L.GridLayer.extend({
         }
 
         L.Util.setOptions(this, options);
+
+        // Default maxNativeZoom to the deepest zoom of the configured built-in source.
+        // Custom sources are left unclamped: their depth is unknown, and guessing would
+        // silently throw away detail the provider does have.
+        if (!options || options.maxNativeZoom === undefined) {
+            this.options.maxNativeZoom = _defaultMaxNativeZoom(this.options.elevationUrl);
+        }
+
         this._recomputeHillshadeConstants();
 
         this.on('tileunload', function (this: L.GridLayer.Relief, e: L.TileEvent) {
@@ -591,8 +625,12 @@ const ReliefLayerClass = L.GridLayer.extend({
                     done(undefined, tile);
                 }
             } catch (error) {
-                if (error instanceof Error && error.name !== 'AbortError') {
+                const aborted =
+                    abortController.signal.aborted ||
+                    (error instanceof Error && error.name === 'AbortError');
+                if (!aborted) {
                     console.error(`Error loading tile ${tileKey}:`, error);
+                    done(error instanceof Error ? error : new Error(String(error)), tile);
                 }
             } finally {
                 this._state.abortControllers.delete(tileKey);
@@ -632,6 +670,8 @@ L.GridLayer.Relief.elevationUrls = {
     terrarium: _defaultElevationUrl,
     mapterhorn: _mapterhornElevationUrl,
 };
+
+L.GridLayer.Relief.elevationMaxNativeZooms = _elevationMaxNativeZooms;
 
 L.GridLayer.Relief.elevationAttributions = {
     terrarium:

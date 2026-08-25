@@ -18,6 +18,11 @@ declare global {
                     mapbox: string;
                     mapterhorn: string;
                 };
+                static elevationMaxNativeZooms: {
+                    terrarium: number;
+                    mapbox: number;
+                    mapterhorn: number;
+                };
                 options: ReliefOptions;
                 _tileUnloaded(coords: L.Coords): void;
                 _getElevation(tileData: Uint8ClampedArray, j: number, i: number): number;

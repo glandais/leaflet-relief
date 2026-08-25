@@ -261,6 +261,38 @@ describe('L.GridLayer.Relief', () => {
         });
     });
 
+    describe('Max native zoom', () => {
+        it('should expose max native zoom per elevation source', () => {
+            expect(L.GridLayer.Relief.elevationMaxNativeZooms.mapterhorn).toBe(17);
+            expect(L.GridLayer.Relief.elevationMaxNativeZooms.terrarium).toBe(15);
+            expect(L.GridLayer.Relief.elevationMaxNativeZooms.mapbox).toBe(15);
+        });
+
+        it('should default to the mapterhorn max native zoom', () => {
+            const layer = L.gridLayer.relief();
+            expect(layer.options.maxNativeZoom).toBe(17);
+        });
+
+        it('should use the terrarium max native zoom when using the terrarium URL', () => {
+            const layer = L.gridLayer.relief({
+                elevationUrl: L.GridLayer.Relief.elevationUrls.terrarium,
+            });
+            expect(layer.options.maxNativeZoom).toBe(15);
+        });
+
+        it('should not clamp custom elevation sources', () => {
+            const layer = L.gridLayer.relief({
+                elevationUrl: 'https://example.com/tiles/{z}/{x}/{y}.png',
+            });
+            expect(layer.options.maxNativeZoom).toBeUndefined();
+        });
+
+        it('should keep an explicit maxNativeZoom', () => {
+            const layer = L.gridLayer.relief({ maxNativeZoom: 12 });
+            expect(layer.options.maxNativeZoom).toBe(12);
+        });
+    });
+
     describe('Elevation Attributions', () => {
         it('should have terrarium attribution', () => {
             expect(L.GridLayer.Relief.elevationAttributions.terrarium).toBeDefined();
