@@ -29,7 +29,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 **Rendering Modes** (internal functions):
 
-- **Hillshade** (`_fillHillshadeTile`): Simulates sunlight on terrain using surface normals and dot product calculations with sun position set at initialization
+- **Hillshade** (`_fillHillshadeTile`): Simulates sunlight on terrain using surface normals and dot product calculations with sun position set at initialization. Gradients are scaled by real-world meters-per-pixel (`_pixelSizeMeters`, zoom + latitude aware) so shading is zoom independent, with an optional `hillshadeExaggeration` zFactor
 - **Slope** (`_fillSlopeTile`): Colors terrain by steepness using Horn's method for gradient calculation and HSV-to-RGB color mapping (green=flat, red=steep)
 
 ### Data Flow
@@ -47,7 +47,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 
 ### Key Algorithms
 
-**Hillshading**: Uses surface normal vectors and sun direction dot product with gamma correction and ambient lighting. Default sun position: 315° azimuth (northwest), 45° elevation. Configurable at initialization via options.
+**Hillshading**: Uses surface normal vectors and sun direction dot product with gamma correction and ambient lighting. Elevation gradients are divided by the real-world pixel size (same latitude-corrected scaling as slope mode) and multiplied by `hillshadeExaggeration`, keeping intensity consistent across zoom levels. Default sun position: 315° azimuth (northwest), 45° elevation. Configurable at initialization via options.
 
 **Slope Calculation**: Horn's method with 8-neighbor kernel, latitude-corrected pixel scaling, and configurable color schemes. Default: green→red gradient. HSV-based presets provide smooth transitions with automatic edge case handling (out-of-bounds slopes use first/last range colors). Edge pixels are clamped to valid tile boundaries for accurate gradient computation.
 
@@ -62,7 +62,11 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - `dist/L.GridLayer.Relief.d.ts` - TypeScript type definitions
 - `index.html` - Interactive demo with controls for azimuth/elevation adjustment
 - `test/L.GridLayer.Relief.test.ts` - Jest unit tests for plugin functionality (TypeScript)
+- `e2e/relief.spec.ts` - Playwright functional end-to-end tests against `index.html`
+- `e2e/visual.spec.ts` + `e2e/visual.spec.ts-snapshots/` - Visual regression tests and their reference screenshots
+- `playwright.config.ts` - Playwright configuration (dev server, screenshot comparison thresholds)
 - `README.md` - Comprehensive plugin documentation
+- `VISUAL_TESTING.md` - Visual regression testing guide; read it before touching rendering code or reference screenshots
 - `package.json` - NPM package configuration with semantic-release
 - `LICENSE` - MIT license
 - `.github/workflows/release.yml` - CI/CD pipeline for automated releases
@@ -87,6 +91,8 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - **Jest Testing**: 25+ unit tests covering all major functionality
 - **Coverage**: ~68% code coverage with thresholds set at 50%
 - **Mocking**: Canvas API and network requests properly mocked for testing
+- **End-to-End**: Playwright suite in `e2e/` - functional tests plus pixel-comparison visual regression tests
+- **Visual Regression**: Any change to the rendering algorithms invalidates the reference screenshots. They must be regenerated in the Docker reference environment, never from a workstation - see [VISUAL_TESTING.md](VISUAL_TESTING.md)
 - **CI Integration**: Tests run automatically on all commits and before releases
 
 ### Release Workflow
@@ -122,6 +128,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - `_canvasPool` - Adaptive canvas pool (grows on demand, trims to 5 canvases when idle); `acquire(size)` sets canvas dimensions to the requested tile size
 - `_getElevation(tileData, j, i)` - Method for elevation extraction from RGBA data
 - `_getZ(tileData, i, j)` - Extracts 3x3 elevation grid with edge clamping for gradient calculations
+- `_pixelSizeMeters(y, z, tileSize)` - Real-world size of a DEM pixel (zoom + latitude corrected), shared by hillshade and slope modes
 - `_defaultHillshadeColorFunction(intensity)` - Default grayscale color function for hillshade
 - `_createSlopeColorFunction(colorConfig)` - Generate slope color function from HSV config with edge case handling
 - `_defaultSlopeColorConfig` - Default green→red slope color scheme
@@ -140,6 +147,7 @@ const reliefLayer = L.gridLayer.relief({
     mode: 'hillshade', // 'hillshade' or 'slope'
     hillshadeAzimuth: 315, // Sun azimuth (0-360°) for hillshade
     hillshadeElevation: 45, // Sun elevation (0-90°) for hillshade
+    hillshadeExaggeration: 1, // Vertical exaggeration (zFactor), 0 disables shading
     hillshadeColorFunction: function (intensity) {
         // Custom color function (optional, defaults to grayscale)
         const value = Math.round(intensity * 255);
@@ -225,6 +233,21 @@ const customRelief = L.gridLayer.relief({
 npm test                # Run all tests
 npm run test:watch      # Run tests in watch mode
 npm run test:coverage   # Generate coverage report
+npm run test:e2e        # Run Playwright end-to-end tests
+npm run test:visual     # Run visual regression tests only
+```
+
+Visual regression references are environment-specific: running `npm run test:visual` on a
+workstation fails on every test. Run them - and regenerate them after an intentional rendering
+change - in the pinned Playwright container, as documented in
+[VISUAL_TESTING.md](VISUAL_TESTING.md):
+
+```bash
+docker run --rm --init --ipc=host \
+    --user $(id -u):$(id -g) -e HOME=/tmp \
+    -v "$PWD":/work -w /work \
+    mcr.microsoft.com/playwright:v1.62.1-noble \
+    npx playwright test visual.spec.ts --update-snapshots
 ```
 
 ### Release (Automated)

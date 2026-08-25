@@ -117,6 +117,19 @@ const customHillshade = L.gridLayer.relief({
 customHillshade.addTo(map);
 ```
 
+### Hillshade Exaggeration
+
+Hillshade slopes are computed in real-world units, so the shading looks the same for a
+given terrain at every zoom level. Use `hillshadeExaggeration` to boost (or soften) the
+contrast, in the same spirit as MapLibre GL's `hillshade-exaggeration` paint property:
+
+```javascript
+const punchyHillshade = L.gridLayer.relief({
+    mode: 'hillshade',
+    hillshadeExaggeration: 1.8, // Stronger relief; 1 = true slope, 0 = no shading
+});
+```
+
 ### Custom Hillshade Colors
 
 ```javascript
@@ -384,6 +397,7 @@ Inherits all options from [`L.GridLayer`](https://leafletjs.com/reference.html#g
 | `mode`                   | `String`          | `'hillshade'`     | Visualization mode: `'hillshade'` or `'slope'`                                       |
 | `hillshadeAzimuth`       | `Number`          | `315`             | Sun azimuth angle in degrees (0-360°) for hillshade mode                             |
 | `hillshadeElevation`     | `Number`          | `45`              | Sun elevation angle in degrees (0-90°) for hillshade mode                            |
+| `hillshadeExaggeration`  | `Number`          | `1`               | Vertical exaggeration (zFactor) applied to the hillshade slope, `0` disables shading |
 | `hillshadeColorFunction` | `Function`        | Grayscale         | Custom color function for hillshade mode `function(intensity)` returns `[r, g, b]`   |
 | `slopeColorScheme`       | `String`          | `'default'`       | Preset color scheme for slope mode: `'default'`, `'glacial'`, `'thermal'`, `'earth'` |
 | `slopeColorConfig`       | `Array`           | Default HSV       | Custom HSV slope-to-hue mapping array for slope mode                                 |

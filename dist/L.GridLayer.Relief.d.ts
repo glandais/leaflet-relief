@@ -25,7 +25,7 @@ declare global {
                 _fillTile: (data: Uint8ClampedArray, tileData: Uint8ClampedArray, coords: L.Coords, abortSignal?: AbortSignal) => void;
                 _doFillTile(data: Uint8ClampedArray, tileData: Uint8ClampedArray, colorFunction: ColorFunction, abortSignal?: AbortSignal): void;
                 _recomputeHillshadeConstants(): void;
-                _createHillshadeColor(zData: number[]): [number, number, number, number];
+                _createHillshadeColor(zData: number[], pixelSizeMeters: number): [number, number, number, number];
                 _fillHillshadeTile(data: Uint8ClampedArray, tileData: Uint8ClampedArray, coords: L.Coords, abortSignal?: AbortSignal): void;
                 _createSlopeColor(zData: number[], pixelScaleMeters: number): [number, number, number, number];
                 _fillSlopeTile(data: Uint8ClampedArray, tileData: Uint8ClampedArray, coords: L.Coords, abortSignal?: AbortSignal): void;
@@ -47,6 +47,7 @@ export interface ReliefOptions extends L.GridLayerOptions {
     mode?: 'hillshade' | 'slope';
     hillshadeAzimuth?: number;
     hillshadeElevation?: number;
+    hillshadeExaggeration?: number;
     hillshadeColorFunction?: HillshadeColorFunction;
     slopeColorFunction?: SlopeColorFunction;
     slopeColorConfig?: SlopeColorConfig[];

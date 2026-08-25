@@ -307,6 +307,10 @@
             <input type="range" id="elevationSlider" min="0" max="90" value="45">
             <span id="elevationValue">45°</span>
             
+            <label for="exaggerationSlider">Exaggeration:</label>
+            <input type="range" id="exaggerationSlider" min="0.1" max="3" step="0.1" value="1">
+            <span id="exaggerationValue">1.0×</span>
+            
             <label for="colorSchemeSelect">Color:</label>
             <select id="colorSchemeSelect">
                 <option value="grayscale">Grayscale</option>
@@ -394,6 +398,8 @@
         const azimuthValue = document.getElementById('azimuthValue');
         const elevationSlider = document.getElementById('elevationSlider');
         const elevationValue = document.getElementById('elevationValue');
+        const exaggerationSlider = document.getElementById('exaggerationSlider');
+        const exaggerationValue = document.getElementById('exaggerationValue');
         const colorSchemeSelect = document.getElementById('colorSchemeSelect');
         const slopeColorSelect = document.getElementById('slopeColorSelect');
         const hillshadeControls = document.getElementById('hillshadeControls');
@@ -413,6 +419,7 @@
                     mode: mode,
                     hillshadeAzimuth: parseInt(azimuthSlider.value),
                     hillshadeElevation: parseInt(elevationSlider.value),
+                    hillshadeExaggeration: parseFloat(exaggerationSlider.value),
                     hillshadeColorFunction: colorSchemes[colorSchemeSelect.value],
                     slopeColorScheme: slopeColorSelect.value,
                     opacity: opacitySlider.value / 100,
@@ -477,6 +484,13 @@
         elevationSlider.addEventListener('input', (e) => {
             const elevation = parseInt(e.target.value);
             elevationValue.textContent = elevation + '°';
+            updateLayer();
+        });
+        
+        // Exaggeration control
+        exaggerationSlider.addEventListener('input', (e) => {
+            const exaggeration = parseFloat(e.target.value);
+            exaggerationValue.textContent = exaggeration.toFixed(1) + '×';
             updateLayer();
         });
         

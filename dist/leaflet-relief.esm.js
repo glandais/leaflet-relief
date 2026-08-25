@@ -33,19 +33,19 @@ var t = 40075017, n = [
 	return (e[2] + 2 * e[5] + e[8] - (e[0] + 2 * e[3] + e[6])) / (8 * t);
 }, l = function(e, t) {
 	return (e[0] + 2 * e[1] + e[2] - (e[6] + 2 * e[7] + e[8])) / (8 * t);
-}, u = function(e, t) {
-	let n = c(e, 5), r = l(e, 5), i = (t.hillshadeA1 - t.hillshadeA2 * n - t.hillshadeA3 * r) / Math.sqrt(1 + n ** 2 + r ** 2);
-	return i < 0 && (i = 0), i = Math.sqrt(i * .8 + .2), i;
-}, d = function(e) {
+}, u = function(e, n, r) {
+	let i = Math.PI - 2 * Math.PI * e / 2 ** n, a = Math.atan(.5 * (Math.exp(i) - Math.exp(-i))), o = t / (r * 2 ** n), s = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, a));
+	return Math.max(.1, o * Math.cos(s));
+}, d = function(e, t, n, r) {
+	let i = c(e, n) * r, a = l(e, n) * r, o = (t.hillshadeA1 - t.hillshadeA2 * i - t.hillshadeA3 * a) / Math.sqrt(1 + i ** 2 + a ** 2);
+	return o < 0 && (o = 0), o = Math.sqrt(o * .8 + .2), o;
+}, f = function(e) {
 	let t = Math.round(e * 255);
 	return [
 		t,
 		t,
 		t
 	];
-}, f = function(e, n, r) {
-	let i = Math.PI - 2 * Math.PI * e / 2 ** n, a = Math.atan(.5 * (Math.exp(i) - Math.exp(-i))), o = t / (r * 2 ** n), s = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, a));
-	return Math.max(.1, o * Math.cos(s));
 }, p = function(e, t) {
 	let n = c(e, t), r = l(e, t);
 	return Math.atan(Math.sqrt(n * n + r * r)) * 180 / Math.PI;
@@ -283,7 +283,8 @@ var t = 40075017, n = [
 		elevationExtractor: o,
 		hillshadeAzimuth: 315,
 		hillshadeElevation: 45,
-		hillshadeColorFunction: d,
+		hillshadeExaggeration: 1,
+		hillshadeColorFunction: f,
 		slopeColorFunction: _(h),
 		attribution: "&copy; <a href=\"https://mapterhorn.com/attribution/\" target=\"_blank\">Mapterhorn</a>"
 	},
@@ -338,17 +339,18 @@ var t = 40075017, n = [
 			}
 		}
 	},
-	_createHillshadeColor: function(e) {
-		let t = u(e, this._state), [n, r, i] = this.options.hillshadeColorFunction(t);
+	_createHillshadeColor: function(e, t) {
+		let n = d(e, this._state, t, this.options.hillshadeExaggeration), [r, i, a] = this.options.hillshadeColorFunction(n);
 		return [
-			n,
 			r,
 			i,
+			a,
 			255
 		];
 	},
 	_fillHillshadeTile: function(e, t, n, r) {
-		this._doFillTile(e, t, (e) => this._createHillshadeColor(e), r);
+		let i = this.getTileSize().x, a = u(n.y, n.z, i);
+		this._doFillTile(e, t, (e) => this._createHillshadeColor(e, a), r);
 	},
 	_createSlopeColor: function(e, t) {
 		let r = p(e, t);
@@ -364,7 +366,7 @@ var t = 40075017, n = [
 		}
 	},
 	_fillSlopeTile: function(e, t, n, r) {
-		let i = n.y, a = n.z, o = this.getTileSize().x, s = f(i, a, o);
+		let i = n.y, a = n.z, o = this.getTileSize().x, s = u(i, a, o);
 		this._doFillTile(e, t, (e) => this._createSlopeColor(e, s), r);
 	},
 	_tileUnloaded: function(e) {
