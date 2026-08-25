@@ -12,22 +12,29 @@ declare global {
                 static elevationUrls: {
                     terrarium: ElevationUrlFunction;
                     mapterhorn: string;
+                    ignLidarHdMnt: ElevationUrlFunction;
+                    ignLidarHdMns: ElevationUrlFunction;
+                };
+                static elevationTileDecoders: {
+                    bil32: ElevationTileDecoder;
                 };
                 static elevationAttributions: {
                     terrarium: string;
                     mapbox: string;
                     mapterhorn: string;
+                    ignLidarHd: string;
                 };
                 static elevationMaxNativeZooms: {
                     terrarium: number;
                     mapbox: number;
                     mapterhorn: number;
+                    ignLidarHd: number;
                 };
                 options: ReliefOptions;
                 _tileUnloaded(coords: L.Coords): void;
                 _getElevation(tileData: ElevationTileData, j: number, i: number): number;
                 _getZ(tileData: ElevationTileData, i: number, j: number): number[];
-                _buildElevationUrl(z: number, x: number, y: number): string;
+                _buildElevationUrl(z: number, x: number, y: number, tileSize: number): string;
                 _rememberMissingTile(url: string): void;
                 _fetchDemData(coords: L.Coords, tileSize: number, demCtx: CanvasRenderingContext2D, abortSignal: AbortSignal): Promise<ElevationTileData | null>;
                 _fillTile: (data: Uint8ClampedArray, tileData: ElevationTileData, coords: L.Coords, abortSignal?: AbortSignal) => void;
@@ -86,12 +93,14 @@ export interface ReliefOptions extends L.GridLayerOptions {
     tricolorExaggeration?: number;
     elevationUrl?: string | ElevationUrlFunction;
     elevationExtractor?: ElevationExtractorFunction;
+    elevationTileDecoder?: ElevationTileDecoder;
     elevationFallbackDepth?: number;
 }
 export type HillshadeColorFunction = (intensity: number) => [number, number, number];
 export type SlopeColorFunction = (slopeDegrees: number) => [number, number, number];
-export type ElevationUrlFunction = (z: number, x: number, y: number) => string;
+export type ElevationUrlFunction = (z: number, x: number, y: number, tileSize: number) => string;
 export type ElevationExtractorFunction = (r: number, g: number, b: number, a: number) => number;
+export type ElevationTileDecoder = (buffer: ArrayBuffer, tileSize: number) => Float32Array;
 type ColorFunction = (zData: number[]) => [number, number, number, number];
 export type ElevationTileData = Uint8ClampedArray | Float32Array;
 export interface SlopeColorConfig {

@@ -217,6 +217,74 @@ const mapterhornRelief = L.gridLayer.relief({
 });
 ```
 
+#### Using IGN LiDAR HD tiles (France)
+
+France's national mapping agency publishes 1 m LiDAR-derived elevation models, roughly
+thirty times finer than the global sources above — a good match for `archeo` and
+`tricolor`. Two models are available: `ignLidarHdMnt` (bare terrain, the one you want for
+archaeology) and `ignLidarHdMns` (surface, including buildings and vegetation).
+
+These are served as raw float32 elevations rather than RGB-encoded images, so they need
+`elevationTileDecoder` instead of `elevationExtractor`:
+
+```javascript
+// IGN LiDAR HD terrain model — free, no API key, France only
+const ignRelief = L.gridLayer.relief({
+    mode: 'archeo',
+    elevationUrl: L.GridLayer.Relief.elevationUrls.ignLidarHdMnt,
+    elevationTileDecoder: L.GridLayer.Relief.elevationTileDecoders.bil32,
+    attribution: L.GridLayer.Relief.elevationAttributions.ignLidarHd,
+});
+```
+
+Things worth knowing before using it:
+
+- **France only** (metropolitan France and the overseas departments). Everywhere else the
+  service answers with no-data and tiles render transparent.
+- This is a **WMS**, not a pyramid of pre-cut tiles on a CDN. Every tile is rendered on
+  demand, uncompressed: 256 KiB per 256 px tile, 1 MiB at 512. **Keep the default
+  `tileSize: 256`** and leave `maxNativeZoom` at its default of `17` — it is a public
+  service, not a CDN.
+- `elevationFallbackDepth` has no effect here: the service answers `200` with a no-data
+  grid instead of `404`, so there is nothing to walk up to.
+- If you only need a hillshade and not the plugin's rendering modes, IGN also publishes a
+  ready-made one as plain raster tiles, usable with a bare `L.tileLayer`:
+
+    ```javascript
+    L.tileLayer(
+        'https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile' +
+            '&LAYER=IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW' +
+            '&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM_0_18' +
+            '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+        { maxNativeZoom: 18 }
+    );
+    ```
+
+#### Using another binary elevation source
+
+`elevationTileDecoder` turns a whole tile of bytes into metres, for any format no image
+decoder understands. It receives the raw response and the tile size, and returns one
+elevation per pixel, row-major from the north-west corner:
+
+```javascript
+const binaryRelief = L.gridLayer.relief({
+    elevationUrl: 'https://mytileserver.com/elevation/{z}/{x}/{y}.bin',
+    elevationTileDecoder: function (buffer, tileSize) {
+        const view = new DataView(buffer);
+        const elevations = new Float32Array(tileSize * tileSize);
+        for (let i = 0; i < elevations.length; i++) {
+            const value = view.getFloat32(i * 4, true);
+            // Anything <= 0 is treated as no-data and rendered transparent.
+            elevations[i] = value < -1000 ? 0 : Math.max(value, 0.01);
+        }
+        return elevations;
+    },
+});
+```
+
+When a decoder is set, `elevationExtractor` is unused and the parent-tile fallback is
+disabled.
+
 ### Slope Analysis Layer
 
 ```javascript
@@ -426,6 +494,14 @@ Available via `L.GridLayer.Relief.elevationUrls`:
 
 - `terrarium` - AWS Terrarium URL function
 - `mapterhorn` - Mapterhorn tile URL template (`https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`)
+- `ignLidarHdMnt` - IGN LiDAR HD terrain model, France (WMS request builder)
+- `ignLidarHdMns` - IGN LiDAR HD surface model, France (WMS request builder)
+
+### Predefined Elevation Tile Decoders
+
+Available via `L.GridLayer.Relief.elevationTileDecoders`:
+
+- `bil32` - BIL 32-bit little-endian float elevations, as served by IGN (`-9999` = no-data)
 
 ### Predefined Elevation Attributions
 
@@ -434,6 +510,7 @@ Available via `L.GridLayer.Relief.elevationAttributions` (HTML strings for Leafl
 - `terrarium` - Mapzen Elevation attribution
 - `mapbox` - Mapbox attribution
 - `mapterhorn` - Mapterhorn attribution
+- `ignLidarHd` - IGN LiDAR HD attribution
 
 ### Max Native Zoom
 
@@ -490,31 +567,32 @@ instead of being reported as an error.
 
 Inherits all options from [`L.GridLayer`](https://leafletjs.com/reference.html#gridlayer) plus the following relief-specific options:
 
-| Option                   | Type              | Default                | Description                                                                                                                                                 |
-| ------------------------ | ----------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`                   | `String`          | `'hillshade'`          | Visualization mode: `'hillshade'`, `'slope'`, `'archeo'` or `'tricolor'`                                                                                    |
-| `hillshadeAzimuth`       | `Number`          | `315`                  | Sun azimuth angle in degrees (0-360°) for hillshade mode                                                                                                    |
-| `hillshadeElevation`     | `Number`          | `45`                   | Sun elevation angle in degrees (0-90°) for hillshade mode                                                                                                   |
-| `hillshadeExaggeration`  | `Number`          | `1`                    | Vertical exaggeration (zFactor) applied to the hillshade slope, `0` disables shading                                                                        |
-| `hillshadeColorFunction` | `Function`        | Grayscale              | Custom color function for hillshade mode `function(intensity)` returns `[r, g, b]`                                                                          |
-| `slopeColorScheme`       | `String`          | `'default'`            | Preset color scheme for slope mode: `'default'`, `'glacial'`, `'thermal'`, `'earth'`                                                                        |
-| `slopeColorConfig`       | `Array`           | Default HSV            | Custom HSV slope-to-hue mapping array for slope mode                                                                                                        |
-| `slopeColorFunction`     | `Function`        | Default green→red      | Custom color function for slope mode `function(slopeDegrees)` returns `[r, g, b]`                                                                           |
-| `archeoAzimuths`         | `Array`           | `[225, 270, 315, 360]` | Light azimuths (degrees) averaged for the archeo shading base                                                                                               |
-| `archeoElevation`        | `Number`          | `45`                   | Sun elevation angle in degrees (0-90°) for archeo mode                                                                                                      |
-| `archeoExaggeration`     | `Number`          | `3`                    | Vertical exaggeration (zFactor) of the archeo shading base                                                                                                  |
-| `archeoGlowStrength`     | `Number`          | `15`                   | Tint gain per unit of local curvature (higher = stronger glow)                                                                                              |
-| `archeoColorScheme`      | `String`          | `'default'`            | Preset archeo colors: `'default'`, `'vivid'`, `'subtle'`                                                                                                    |
-| `archeoWarmColor`        | `Array`           | `[236, 150, 82]`       | `[r, g, b]` tint for convex micro-relief (overrides scheme)                                                                                                 |
-| `archeoCoolColor`        | `Array`           | `[126, 172, 246]`      | `[r, g, b]` tint for concave micro-relief (overrides scheme)                                                                                                |
-| `archeoBaseColor`        | `Array`           | `[192, 191, 196]`      | `[r, g, b]` base color for flat terrain (overrides scheme)                                                                                                  |
-| `tricolorAzimuths`       | `Array`           | `[315, 15, 75]`        | Azimuths (degrees) lighting the red, green and blue channels                                                                                                |
-| `tricolorElevation`      | `Number`          | `35`                   | Sun elevation angle in degrees (0-90°) for tricolor mode                                                                                                    |
-| `tricolorExaggeration`   | `Number`          | `1`                    | Vertical exaggeration (zFactor) for tricolor mode                                                                                                           |
-| `elevationUrl`           | `String/Function` | AWS Terrarium          | Custom elevation tile URL pattern or function                                                                                                               |
-| `elevationExtractor`     | `Function`        | Terrarium decoder      | Custom function to extract elevation from RGBA values                                                                                                       |
-| `elevationFallbackDepth` | `Number`          | `5`                    | Parent levels to walk up when a tile is missing, upsampling the first one found; `0` disables the fallback                                                  |
-| `maxNativeZoom`          | `Number`          | Source dependent       | Deepest zoom the elevation source provides; deeper zooms upscale the last tile. Defaults to `17` (Mapterhorn) or `15` (Terrarium); unset for custom sources |
+| Option                   | Type              | Default                | Description                                                                                                                                                               |
+| ------------------------ | ----------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`                   | `String`          | `'hillshade'`          | Visualization mode: `'hillshade'`, `'slope'`, `'archeo'` or `'tricolor'`                                                                                                  |
+| `hillshadeAzimuth`       | `Number`          | `315`                  | Sun azimuth angle in degrees (0-360°) for hillshade mode                                                                                                                  |
+| `hillshadeElevation`     | `Number`          | `45`                   | Sun elevation angle in degrees (0-90°) for hillshade mode                                                                                                                 |
+| `hillshadeExaggeration`  | `Number`          | `1`                    | Vertical exaggeration (zFactor) applied to the hillshade slope, `0` disables shading                                                                                      |
+| `hillshadeColorFunction` | `Function`        | Grayscale              | Custom color function for hillshade mode `function(intensity)` returns `[r, g, b]`                                                                                        |
+| `slopeColorScheme`       | `String`          | `'default'`            | Preset color scheme for slope mode: `'default'`, `'glacial'`, `'thermal'`, `'earth'`                                                                                      |
+| `slopeColorConfig`       | `Array`           | Default HSV            | Custom HSV slope-to-hue mapping array for slope mode                                                                                                                      |
+| `slopeColorFunction`     | `Function`        | Default green→red      | Custom color function for slope mode `function(slopeDegrees)` returns `[r, g, b]`                                                                                         |
+| `archeoAzimuths`         | `Array`           | `[225, 270, 315, 360]` | Light azimuths (degrees) averaged for the archeo shading base                                                                                                             |
+| `archeoElevation`        | `Number`          | `45`                   | Sun elevation angle in degrees (0-90°) for archeo mode                                                                                                                    |
+| `archeoExaggeration`     | `Number`          | `3`                    | Vertical exaggeration (zFactor) of the archeo shading base                                                                                                                |
+| `archeoGlowStrength`     | `Number`          | `15`                   | Tint gain per unit of local curvature (higher = stronger glow)                                                                                                            |
+| `archeoColorScheme`      | `String`          | `'default'`            | Preset archeo colors: `'default'`, `'vivid'`, `'subtle'`                                                                                                                  |
+| `archeoWarmColor`        | `Array`           | `[236, 150, 82]`       | `[r, g, b]` tint for convex micro-relief (overrides scheme)                                                                                                               |
+| `archeoCoolColor`        | `Array`           | `[126, 172, 246]`      | `[r, g, b]` tint for concave micro-relief (overrides scheme)                                                                                                              |
+| `archeoBaseColor`        | `Array`           | `[192, 191, 196]`      | `[r, g, b]` base color for flat terrain (overrides scheme)                                                                                                                |
+| `tricolorAzimuths`       | `Array`           | `[315, 15, 75]`        | Azimuths (degrees) lighting the red, green and blue channels                                                                                                              |
+| `tricolorElevation`      | `Number`          | `35`                   | Sun elevation angle in degrees (0-90°) for tricolor mode                                                                                                                  |
+| `tricolorExaggeration`   | `Number`          | `1`                    | Vertical exaggeration (zFactor) for tricolor mode                                                                                                                         |
+| `elevationUrl`           | `String/Function` | AWS Terrarium          | Custom elevation tile URL pattern or function                                                                                                                             |
+| `elevationExtractor`     | `Function`        | Terrarium decoder      | Custom function to extract elevation from RGBA values                                                                                                                     |
+| `elevationTileDecoder`   | `Function`        | none                   | Decodes a whole binary tile to metres, `(buffer, tileSize) => Float32Array`; bypasses the image decoder, `elevationExtractor` and the parent-tile fallback                |
+| `elevationFallbackDepth` | `Number`          | `5`                    | Parent levels to walk up when a tile is missing, upsampling the first one found; `0` disables the fallback                                                                |
+| `maxNativeZoom`          | `Number`          | Source dependent       | Deepest zoom the elevation source provides; deeper zooms upscale the last tile. Defaults to `17` (Mapterhorn, IGN LiDAR HD) or `15` (Terrarium); unset for custom sources |
 
 **Note**: Slope color options are mutually exclusive (XOR): only one of `slopeColorScheme`, `slopeColorConfig`, or `slopeColorFunction` should be used.
 
@@ -585,13 +663,15 @@ Inherits all events from [`L.GridLayer`](https://leafletjs.com/reference.html#gr
 
 ### Supported Formats
 
-The plugin supports any RGB-encoded elevation tiles with configurable decoders:
+The plugin supports RGB-encoded elevation tiles with configurable decoders, plus binary
+elevation grids through `elevationTileDecoder`:
 
 - **AWS Terrarium** - Default format, free to use (256×256)
 - **Mapterhorn** - Free, no API key required (512×512 WebP, Terrarium encoding)
+- **IGN LiDAR HD** - Free, no API key, 1 m resolution, France only (BIL float32 over WMS)
 - **Mapbox Terrain-RGB** - Requires Mapbox access token
 - **NextZen Terrarium** - Requires API key
-- **Custom formats** - Define your own elevation extractor function
+- **Custom formats** - Define your own elevation extractor or tile decoder
 
 ## Performance Notes
 

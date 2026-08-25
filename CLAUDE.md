@@ -22,6 +22,8 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 **Elevation Data System** (internal functions in main file):
 
 - Direct fetch per tile with browser caching (no internal tile caching)
+- Two decoding paths: RGB-encoded images (default) or, when `elevationTileDecoder` is set,
+  a whole binary tile decoded to metres in one call (IGN's BIL float32)
 - `_getElevation`: Method for extracting elevation data from RGBA pixel values
 - `_canvasPool`: Adaptive canvas pooling for DEM data processing (grows on demand, trims when idle)
 - Supports multiple elevation formats: AWS Terrarium, Mapbox Terrain-RGB, custom extractors
@@ -68,7 +70,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - `dist/leaflet-relief.umd.js` - UMD module format
 - `dist/leaflet-relief.esm.js` - ES module format
 - `dist/L.GridLayer.Relief.d.ts` - TypeScript type definitions
-- `index.html` - Interactive demo exposing every rendering option of the four modes, plus the elevation source and fallback depth
+- `index.html` - Interactive demo exposing every rendering option of the four modes, plus the elevation source (Mapterhorn, Terrarium, IGN LiDAR HD MNT/MNS) and fallback depth
 - `test/L.GridLayer.Relief.test.ts` - Jest unit tests for plugin functionality (TypeScript)
 - `e2e/relief.spec.ts` - Playwright functional end-to-end tests against `index.html`
 - `e2e/visual.spec.ts` + `e2e/visual.spec.ts-snapshots/` - Visual regression tests and their reference screenshots
@@ -152,8 +154,24 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - `_fillTricolorTile(data, tileData, coords, abortSignal)` - Tricolor rendering
 - Built-in elevation extractors: `_defaultElevationExtractor`, `_mapboxElevationExtractor`
 - Mapterhorn URL constant: `_mapterhornElevationUrl` (`https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`)
-- `_elevationMaxNativeZooms` - Deepest zoom published by each source (terrarium 15, mapbox 15, mapterhorn 17); drives the default `maxNativeZoom` (via `_defaultMaxNativeZoom`, built-in URLs only) so Leaflet upscales instead of requesting missing tiles
-- `_fetchDemData(coords, tileSize, demCtx, abortSignal)` - Fetches a tile, falling back to parent tiles on 404/403/204 up to `elevationFallbackDepth` levels; returns raw RGBA at native zoom, a decoded `Float32Array` when upsampled, or `null` when nothing is available (tile left transparent)
+- IGN LiDAR HD: `_ignLidarHdElevationUrl(layer)` builds a WMS GetMap request covering exactly one
+  XYZ tile, via `_tileNorthLatitude`. It must stay in `CRS=EPSG:4326` (axes latitude first in WMS
+  1.3.0, so `BBOX=south,west,north,east`): the service also accepts EPSG:3857 but resamples it one
+  row out of two, doubling the vertical gradient and banding the hillshade. Sampling linearly in
+  latitude instead of in Mercator y shifts rows by ~0.003 px at z16, far below the source accuracy.
+  `_ignLidarHdMntElevationUrl` / `_ignLidarHdMnsElevationUrl` are the frozen instances
+  `_defaultMaxNativeZoom` matches by identity. The WMTS service is _not_ usable as a DEM: it only
+  serves a pre-computed hillshade
+- `_bil32ElevationDecoder(buffer, tileSize)` - BIL float32 little-endian, no header, rows north to
+  south. Reads through `DataView.getFloat32(i * 4, true)`, never a `Float32Array` view, whose byte
+  order follows the platform. Maps `<= -9000` (IGN's `-9999`) to `0` so the renderer treats it as
+  no-data, and clamps real ground to `0.01` m: `_doFillTile` drops every sample `<= 0`, which would
+  otherwise punch holes wherever the ground sits at sea level (Camargue, Corsican shorelines)
+- `_elevationMaxNativeZooms` - Deepest zoom published by each source (terrarium 15, mapbox 15, mapterhorn 17, ignLidarHd 17); drives the default `maxNativeZoom` (via `_defaultMaxNativeZoom`, built-in URLs only) so Leaflet upscales instead of requesting missing tiles
+- `_fetchDemData(coords, tileSize, demCtx, abortSignal)` - When `elevationTileDecoder` is set, the
+  response goes straight from `arrayBuffer()` to the decoder (no canvas, no `createImageBitmap`) and
+  the parent walk-up is forced off: a WMS answers 200 with a no-data grid rather than 404, and the
+  parent resampler only speaks RGBA. Otherwise fetches a tile, falling back to parent tiles on 404/403/204 up to `elevationFallbackDepth` levels; returns raw RGBA at native zoom, a decoded `Float32Array` when upsampled, or `null` when nothing is available (tile left transparent)
 - `_decodeElevations(tileData, tileSize, extractor, startX, startY, endX, endY)` / `_resampleParentElevations(...)` - Decode a sample window of a DEM tile to metres and bilinearly resample a parent's quadrant. Interpolation must happen on elevations, never on the encoded RGBA (Terrarium's green channel wraps every 256 m); no-data neighbours fall back to nearest sampling so coastlines keep their shape. Only the window the child tile reads is decoded (one parent sample per 2^depth child pixels), never the whole parent
 - `_state.missingTiles` - Per-layer memo of absent tile URLs (bounded). Absent tiles ship without cache headers, and a missing tile rules out all of its descendants, so known-empty zooms are skipped entirely
 
@@ -250,6 +268,23 @@ const tricolor = L.gridLayer.relief({
 });
 ```
 
+### IGN LiDAR HD (France)
+
+```javascript
+// 1 m terrain model, free, no API key, France only. Served as raw float32 over WMS,
+// so it needs elevationTileDecoder rather than elevationExtractor.
+const ign = L.gridLayer.relief({
+    mode: 'archeo',
+    elevationUrl: L.GridLayer.Relief.elevationUrls.ignLidarHdMnt, // or .ignLidarHdMns
+    elevationTileDecoder: L.GridLayer.Relief.elevationTileDecoders.bil32,
+    attribution: L.GridLayer.Relief.elevationAttributions.ignLidarHd,
+});
+```
+
+Constraints: France only (transparent elsewhere), a WMS rendering each tile on demand and
+uncompressed (256 KiB per 256 px tile — keep `tileSize: 256`), and `elevationFallbackDepth` has no
+effect since the service never answers 404.
+
 ### Custom Elevation Sources
 
 ```javascript
@@ -269,8 +304,11 @@ const customRelief = L.gridLayer.relief({
 - `L.GridLayer.Relief.elevationExtractors.mapterhorn` - Mapterhorn (same as Terrarium)
 - `L.GridLayer.Relief.elevationUrls.terrarium` - AWS Terrarium URL function
 - `L.GridLayer.Relief.elevationUrls.mapterhorn` - Mapterhorn URL template (512×512 WebP)
-- `L.GridLayer.Relief.elevationAttributions.terrarium` / `.mapbox` / `.mapterhorn` - HTML attribution strings for Leaflet's `attribution` option
-- `L.GridLayer.Relief.elevationMaxNativeZooms.terrarium` / `.mapbox` / `.mapterhorn` - Deepest native zoom per source (15 / 15 / 17)
+- `L.GridLayer.Relief.elevationUrls.ignLidarHdMnt` / `.ignLidarHdMns` - IGN LiDAR HD terrain and
+  surface models, France only, 1 m native (WMS request builders)
+- `L.GridLayer.Relief.elevationTileDecoders.bil32` - BIL float32 decoder, required by the IGN sources
+- `L.GridLayer.Relief.elevationAttributions.terrarium` / `.mapbox` / `.mapterhorn` / `.ignLidarHd` - HTML attribution strings for Leaflet's `attribution` option
+- `L.GridLayer.Relief.elevationMaxNativeZooms.terrarium` / `.mapbox` / `.mapterhorn` / `.ignLidarHd` - Deepest native zoom per source (15 / 15 / 17 / 17)
 
 ## Development Commands
 
