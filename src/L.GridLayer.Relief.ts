@@ -271,21 +271,36 @@ const _isMissingTileStatus = function (status: number): boolean {
     return status === 404 || status === 403 || status === 204;
 };
 
+// Decode the `[startX..endX] x [startY..endY]` sample window of an encoded DEM
+// tile to metres, packed row-major with a stride of `endX - startX + 1`. Only the
+// window is decoded: an upsampled child tile reads a small quadrant of its parent
+// (a single parent sample per 2^depth child pixels), so decoding the whole parent
+// would run tileSize^2 extractor calls per child tile for nothing.
 const _decodeElevations = function (
     tileData: Uint8ClampedArray,
     tileSize: number,
-    extractor: ElevationExtractorFunction
+    extractor: ElevationExtractorFunction,
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number
 ): Float32Array {
-    const elevations = new Float32Array(tileSize * tileSize);
-    for (let index = 0; index < elevations.length; index++) {
-        const pixelIndex = index * 4;
-        elevations[index] = extractor(
-            tileData[pixelIndex],
-            tileData[pixelIndex + 1],
-            tileData[pixelIndex + 2],
-            tileData[pixelIndex + 3]
-        );
+    const width = endX - startX + 1;
+    const elevations = new Float32Array(width * (endY - startY + 1));
+
+    for (let y = startY; y <= endY; y++) {
+        const rowOffset = (y - startY) * width;
+        for (let x = startX; x <= endX; x++) {
+            const pixelIndex = (y * tileSize + x) * 4;
+            elevations[rowOffset + (x - startX)] = extractor(
+                tileData[pixelIndex],
+                tileData[pixelIndex + 1],
+                tileData[pixelIndex + 2],
+                tileData[pixelIndex + 3]
+            );
+        }
     }
+
     return elevations;
 };
 
@@ -295,38 +310,61 @@ const _decodeElevations = function (
 // blending the RGBA would invent cliffs. Bilinear output is piecewise linear, so
 // gradients stay correct when measured at the child's own pixel size.
 const _resampleParentElevations = function (
-    parentElevations: Float32Array,
+    parentTileData: Uint8ClampedArray,
     tileSize: number,
     offsetX: number,
     offsetY: number,
-    scale: number
+    scale: number,
+    extractor: ElevationExtractorFunction
 ): Float32Array {
     const elevations = new Float32Array(tileSize * tileSize);
     const maxIndex = tileSize - 1;
+    const clampIndex = (value: number): number => Math.max(0, Math.min(maxIndex, value));
+
+    // Widest span of parent samples the loop below can read: the child pixel
+    // centres run from `offset + 0.5 / scale - 0.5` to `offset + subTileSize -
+    // 0.5 / scale - 0.5`, and bilinear also reads the sample after each floor.
+    const subTileSize = tileSize / scale;
+    const startX = clampIndex(Math.floor(offsetX - 0.5));
+    const endX = clampIndex(Math.floor(offsetX + subTileSize - 0.5) + 1);
+    const startY = clampIndex(Math.floor(offsetY - 0.5));
+    const endY = clampIndex(Math.floor(offsetY + subTileSize - 0.5) + 1);
+    const windowWidth = endX - startX + 1;
+    const parentElevations = _decodeElevations(
+        parentTileData,
+        tileSize,
+        extractor,
+        startX,
+        startY,
+        endX,
+        endY
+    );
 
     for (let y = 0; y < tileSize; y++) {
         const sourceY = offsetY + (y + 0.5) / scale - 0.5;
-        const y0 = Math.max(0, Math.min(maxIndex, Math.floor(sourceY)));
+        const y0 = clampIndex(Math.floor(sourceY));
         const y1 = Math.min(maxIndex, y0 + 1);
         const fy = Math.max(0, Math.min(1, sourceY - y0));
+        const row0 = (y0 - startY) * windowWidth;
+        const row1 = (y1 - startY) * windowWidth;
 
         for (let x = 0; x < tileSize; x++) {
             const sourceX = offsetX + (x + 0.5) / scale - 0.5;
-            const x0 = Math.max(0, Math.min(maxIndex, Math.floor(sourceX)));
-            const x1 = Math.min(maxIndex, x0 + 1);
-            const fx = Math.max(0, Math.min(1, sourceX - x0));
+            const x0 = clampIndex(Math.floor(sourceX)) - startX;
+            const x1 = Math.min(maxIndex, clampIndex(Math.floor(sourceX)) + 1) - startX;
+            const fx = Math.max(0, Math.min(1, sourceX - (x0 + startX)));
 
-            const z00 = parentElevations[y0 * tileSize + x0];
-            const z10 = parentElevations[y0 * tileSize + x1];
-            const z01 = parentElevations[y1 * tileSize + x0];
-            const z11 = parentElevations[y1 * tileSize + x1];
+            const z00 = parentElevations[row0 + x0];
+            const z10 = parentElevations[row0 + x1];
+            const z01 = parentElevations[row1 + x0];
+            const z11 = parentElevations[row1 + x1];
 
             let value: number;
             if (z00 <= 0 || z10 <= 0 || z01 <= 0 || z11 <= 0) {
                 // A no-data neighbour would bleed across the boundary and turn
                 // coastlines into ramps: keep the nearest sample instead, so the
                 // no-data mask stays at the parent's resolution.
-                value = parentElevations[(fy < 0.5 ? y0 : y1) * tileSize + (fx < 0.5 ? x0 : x1)];
+                value = parentElevations[(fy < 0.5 ? row0 : row1) + (fx < 0.5 ? x0 : x1)];
             } else {
                 const top = z00 + (z10 - z00) * fx;
                 const bottom = z01 + (z11 - z01) * fx;
@@ -746,11 +784,12 @@ const ReliefLayerClass = L.GridLayer.extend({
 
             const subTileSize = tileSize / scale;
             return _resampleParentElevations(
-                _decodeElevations(demTileData, tileSize, this.options.elevationExtractor),
+                demTileData,
                 tileSize,
                 (coords.x - sourceX * scale) * subTileSize,
                 (coords.y - sourceY * scale) * subTileSize,
-                scale
+                scale,
+                this.options.elevationExtractor
             );
         }
 

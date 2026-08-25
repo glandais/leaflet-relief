@@ -45,28 +45,31 @@ var t = 40075017, n = [
 	return Math.max(.1, o * Math.cos(s));
 }, p = 5, m = 2048, h = function(e) {
 	return e === 404 || e === 403 || e === 204;
-}, g = function(e, t, n) {
-	let r = new Float32Array(t * t);
-	for (let t = 0; t < r.length; t++) {
-		let i = t * 4;
-		r[t] = n(e[i], e[i + 1], e[i + 2], e[i + 3]);
-	}
-	return r;
-}, _ = function(e, t, n, r, i) {
-	let a = new Float32Array(t * t), o = t - 1;
-	for (let s = 0; s < t; s++) {
-		let c = r + (s + .5) / i - .5, l = Math.max(0, Math.min(o, Math.floor(c))), u = Math.min(o, l + 1), d = Math.max(0, Math.min(1, c - l));
-		for (let r = 0; r < t; r++) {
-			let c = n + (r + .5) / i - .5, f = Math.max(0, Math.min(o, Math.floor(c))), p = Math.min(o, f + 1), m = Math.max(0, Math.min(1, c - f)), h = e[l * t + f], g = e[l * t + p], _ = e[u * t + f], v = e[u * t + p], y;
-			if (h <= 0 || g <= 0 || _ <= 0 || v <= 0) y = e[(d < .5 ? l : u) * t + (m < .5 ? f : p)];
-			else {
-				let e = h + (g - h) * m;
-				y = e + (_ + (v - _) * m - e) * d;
-			}
-			a[s * t + r] = y;
+}, g = function(e, t, n, r, i, a, o) {
+	let s = a - r + 1, c = new Float32Array(s * (o - i + 1));
+	for (let l = i; l <= o; l++) {
+		let o = (l - i) * s;
+		for (let i = r; i <= a; i++) {
+			let a = (l * t + i) * 4;
+			c[o + (i - r)] = n(e[a], e[a + 1], e[a + 2], e[a + 3]);
 		}
 	}
-	return a;
+	return c;
+}, _ = function(e, t, n, r, i, a) {
+	let o = new Float32Array(t * t), s = t - 1, c = (e) => Math.max(0, Math.min(s, e)), l = t / i, u = c(Math.floor(n - .5)), d = c(Math.floor(n + l - .5) + 1), f = c(Math.floor(r - .5)), p = c(Math.floor(r + l - .5) + 1), m = d - u + 1, h = g(e, t, a, u, f, d, p);
+	for (let e = 0; e < t; e++) {
+		let a = r + (e + .5) / i - .5, l = c(Math.floor(a)), d = Math.min(s, l + 1), p = Math.max(0, Math.min(1, a - l)), g = (l - f) * m, _ = (d - f) * m;
+		for (let r = 0; r < t; r++) {
+			let a = n + (r + .5) / i - .5, l = c(Math.floor(a)) - u, d = Math.min(s, c(Math.floor(a)) + 1) - u, f = Math.max(0, Math.min(1, a - (l + u))), m = h[g + l], v = h[g + d], y = h[_ + l], b = h[_ + d], x;
+			if (m <= 0 || v <= 0 || y <= 0 || b <= 0) x = h[(p < .5 ? g : _) + (f < .5 ? l : d)];
+			else {
+				let e = m + (v - m) * f;
+				x = e + (y + (b - y) * f - e) * p;
+			}
+			o[e * t + r] = x;
+		}
+	}
+	return o;
 }, v = function(e, t, n, r) {
 	let i = u(e, n) * r, a = d(e, n) * r, o = (t.hillshadeA1 - t.hillshadeA2 * i - t.hillshadeA3 * a) / Math.sqrt(1 + i ** 2 + a ** 2);
 	return o < 0 && (o = 0), o = Math.sqrt(o * .8 + .2), o;
@@ -439,7 +442,7 @@ var t = 40075017, n = [
 			let p = n.getImageData(0, 0, t, t).data;
 			if (a === 0) return p;
 			let m = t / o;
-			return _(g(p, t, this.options.elevationExtractor), t, (e.x - s * o) * m, (e.y - c * o) * m, o);
+			return _(p, t, (e.x - s * o) * m, (e.y - c * o) * m, o, this.options.elevationExtractor);
 		}
 		return null;
 	},
