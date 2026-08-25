@@ -1,3 +1,10 @@
+## [1.5.3](https://github.com/glandais/leaflet-relief/compare/v1.5.2...v1.5.3) (2026-08-25)
+
+
+### Bug Fixes
+
+* **hillshade:** scale shading by real-world pixel size ([#97](https://github.com/glandais/leaflet-relief/issues/97)) ([801bead](https://github.com/glandais/leaflet-relief/commit/801bead9a2a5f2388eeb5883ac70e0a5b5a98b70)), closes [#94](https://github.com/glandais/leaflet-relief/issues/94) [#94](https://github.com/glandais/leaflet-relief/issues/94)
+
 ## [1.5.2](https://github.com/glandais/leaflet-relief/compare/v1.5.1...v1.5.2) (2026-07-14)
 
 
