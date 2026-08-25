@@ -37,7 +37,9 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 1. Leaflet requests tiles via `createTile(coords, done)`
 2. Plugin creates canvas and ImageData buffer
 3. Acquires canvas from pool for DEM data processing
-4. Fetches single elevation tile with abort controller
+4. Fetches the elevation tile with abort controller, walking up to parent tiles when the
+   source has no data at that zoom (`_fetchDemData`); a parent tile is decoded to metres
+   and bilinearly resampled onto the requested tile
 5. Mode-specific renderer processes each pixel:
     - Uses `_getElevation` to get elevation from RGBA data
     - Calculates gradients using `_getZ` (with edge pixel clamping)
@@ -77,6 +79,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - **Initial Configuration**: Azimuth and elevation angles set at layer initialization
 - **Custom Elevation Sources**: Support for different tile providers (AWS Terrarium, Mapbox, custom URLs)
 - **Configurable Extractors**: Built-in decoders for common formats plus custom extraction functions
+- **Partial Coverage Fallback**: `elevationFallbackDepth` (default 5) parent levels are probed when a source has no data at the requested zoom (e.g. Mapterhorn stops at z12 around Cork while publishing z17 over LiDAR countries)
 - **Modern ES Module**: TypeScript implementation with proper type definitions
 - **Factory Function**: `L.gridLayer.relief(options)` for convenient layer creation
 - **Canvas Pooling**: Adaptive canvas pool for efficient memory management
@@ -138,6 +141,9 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - Built-in elevation extractors: `_defaultElevationExtractor`, `_mapboxElevationExtractor`
 - Mapterhorn URL constant: `_mapterhornElevationUrl` (`https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`)
 - `_elevationMaxNativeZooms` - Deepest zoom published by each source (terrarium 15, mapbox 15, mapterhorn 17); drives the default `maxNativeZoom` (via `_defaultMaxNativeZoom`, built-in URLs only) so Leaflet upscales instead of requesting missing tiles
+- `_fetchDemData(coords, tileSize, demCtx, abortSignal)` - Fetches a tile, falling back to parent tiles on 404/403/204 up to `elevationFallbackDepth` levels; returns raw RGBA at native zoom, a decoded `Float32Array` when upsampled, or `null` when nothing is available (tile left transparent)
+- `_decodeElevations(tileData, tileSize, extractor)` / `_resampleParentElevations(...)` - Decode a DEM tile to metres and bilinearly resample a parent's quadrant. Interpolation must happen on elevations, never on the encoded RGBA (Terrarium's green channel wraps every 256 m); no-data neighbours fall back to nearest sampling so coastlines keep their shape
+- `_state.missingTiles` - Per-layer memo of absent tile URLs (bounded). Absent tiles ship without cache headers, and a missing tile rules out all of its descendants, so known-empty zooms are skipped entirely
 
 ## Configuration Options
 
@@ -149,6 +155,7 @@ const reliefLayer = L.gridLayer.relief({
     hillshadeAzimuth: 315, // Sun azimuth (0-360°) for hillshade
     hillshadeElevation: 45, // Sun elevation (0-90°) for hillshade
     hillshadeExaggeration: 1, // Vertical exaggeration (zFactor), 0 disables shading
+    elevationFallbackDepth: 5, // Parent levels probed when a tile is missing, 0 disables
     hillshadeColorFunction: function (intensity) {
         // Custom color function (optional, defaults to grayscale)
         const value = Math.round(intensity * 255);

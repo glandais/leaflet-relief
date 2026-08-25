@@ -28,18 +28,27 @@ declare global {
                 // Private methods
                 _tileUnloaded(coords: L.Coords): void;
 
-                _getElevation(tileData: Uint8ClampedArray, j: number, i: number): number;
-                _getZ(tileData: Uint8ClampedArray, i: number, j: number): number[];
+                _getElevation(tileData: ElevationTileData, j: number, i: number): number;
+                _getZ(tileData: ElevationTileData, i: number, j: number): number[];
+
+                _buildElevationUrl(z: number, x: number, y: number): string;
+                _rememberMissingTile(url: string): void;
+                _fetchDemData(
+                    coords: L.Coords,
+                    tileSize: number,
+                    demCtx: CanvasRenderingContext2D,
+                    abortSignal: AbortSignal
+                ): Promise<ElevationTileData | null>;
 
                 _fillTile: (
                     data: Uint8ClampedArray,
-                    tileData: Uint8ClampedArray,
+                    tileData: ElevationTileData,
                     coords: L.Coords,
                     abortSignal?: AbortSignal
                 ) => void;
                 _doFillTile(
                     data: Uint8ClampedArray,
-                    tileData: Uint8ClampedArray,
+                    tileData: ElevationTileData,
                     colorFunction: ColorFunction,
                     abortSignal?: AbortSignal
                 ): void;
@@ -51,7 +60,7 @@ declare global {
                 ): [number, number, number, number];
                 _fillHillshadeTile(
                     data: Uint8ClampedArray,
-                    tileData: Uint8ClampedArray,
+                    tileData: ElevationTileData,
                     coords: L.Coords,
                     abortSignal?: AbortSignal
                 ): void;
@@ -62,7 +71,7 @@ declare global {
                 ): [number, number, number, number];
                 _fillSlopeTile(
                     data: Uint8ClampedArray,
-                    tileData: Uint8ClampedArray,
+                    tileData: ElevationTileData,
                     coords: L.Coords,
                     abortSignal?: AbortSignal
                 ): void;
@@ -82,6 +91,7 @@ export interface ReliefState {
     hillshadeA2: number;
     hillshadeA3: number;
     abortControllers: globalThis.Map<string, AbortController>;
+    missingTiles: Set<string>;
 }
 
 // Type definitions
@@ -96,6 +106,7 @@ export interface ReliefOptions extends L.GridLayerOptions {
     slopeColorScheme?: 'default' | 'glacial' | 'thermal' | 'earth';
     elevationUrl?: string | ElevationUrlFunction;
     elevationExtractor?: ElevationExtractorFunction;
+    elevationFallbackDepth?: number;
 }
 
 export type HillshadeColorFunction = (intensity: number) => [number, number, number];
@@ -104,6 +115,10 @@ export type ElevationUrlFunction = (z: number, x: number, y: number) => string;
 export type ElevationExtractorFunction = (r: number, g: number, b: number, a: number) => number;
 
 type ColorFunction = (zData: number[]) => [number, number, number, number];
+
+// A tile of elevation samples, either still encoded as RGBA (native zoom, decoded
+// lazily per pixel) or already decoded to metres (upsampled from a parent tile).
+export type ElevationTileData = Uint8ClampedArray | Float32Array;
 
 export interface SlopeColorConfig {
     slope: { min: number; max: number };
@@ -240,6 +255,91 @@ const _pixelSizeMeters = function (y: number, z: number, tileSize: number): numb
     return Math.max(0.1, metersPerPixelEquator * Math.cos(clampedLatitude));
 };
 
+// ====================== ELEVATION TILE FALLBACK ======================
+
+// How many parent levels to walk up by default when a tile is missing. Five
+// levels cover Mapterhorn's worst case (z17 requested, z12 published).
+const _DEFAULT_ELEVATION_FALLBACK_DEPTH = 5;
+
+// Bound on the per-layer memo of missing tiles. Absent tiles are typically served
+// without any cache header, so without this memo every pan re-requests them.
+const _MISSING_TILE_MEMO_SIZE = 2048;
+
+// Statuses that mean "this source has no data here", as opposed to a transient
+// failure worth surfacing as a tile error.
+const _isMissingTileStatus = function (status: number): boolean {
+    return status === 404 || status === 403 || status === 204;
+};
+
+const _decodeElevations = function (
+    tileData: Uint8ClampedArray,
+    tileSize: number,
+    extractor: ElevationExtractorFunction
+): Float32Array {
+    const elevations = new Float32Array(tileSize * tileSize);
+    for (let index = 0; index < elevations.length; index++) {
+        const pixelIndex = index * 4;
+        elevations[index] = extractor(
+            tileData[pixelIndex],
+            tileData[pixelIndex + 1],
+            tileData[pixelIndex + 2],
+            tileData[pixelIndex + 3]
+        );
+    }
+    return elevations;
+};
+
+// Resample the part of a parent DEM tile covered by one of its descendants.
+// Interpolation happens on decoded metres, never on the encoded bytes: Terrarium
+// and Terrain-RGB pack elevation across channels (green wraps every 256 m), so
+// blending the RGBA would invent cliffs. Bilinear output is piecewise linear, so
+// gradients stay correct when measured at the child's own pixel size.
+const _resampleParentElevations = function (
+    parentElevations: Float32Array,
+    tileSize: number,
+    offsetX: number,
+    offsetY: number,
+    scale: number
+): Float32Array {
+    const elevations = new Float32Array(tileSize * tileSize);
+    const maxIndex = tileSize - 1;
+
+    for (let y = 0; y < tileSize; y++) {
+        const sourceY = offsetY + (y + 0.5) / scale - 0.5;
+        const y0 = Math.max(0, Math.min(maxIndex, Math.floor(sourceY)));
+        const y1 = Math.min(maxIndex, y0 + 1);
+        const fy = Math.max(0, Math.min(1, sourceY - y0));
+
+        for (let x = 0; x < tileSize; x++) {
+            const sourceX = offsetX + (x + 0.5) / scale - 0.5;
+            const x0 = Math.max(0, Math.min(maxIndex, Math.floor(sourceX)));
+            const x1 = Math.min(maxIndex, x0 + 1);
+            const fx = Math.max(0, Math.min(1, sourceX - x0));
+
+            const z00 = parentElevations[y0 * tileSize + x0];
+            const z10 = parentElevations[y0 * tileSize + x1];
+            const z01 = parentElevations[y1 * tileSize + x0];
+            const z11 = parentElevations[y1 * tileSize + x1];
+
+            let value: number;
+            if (z00 <= 0 || z10 <= 0 || z01 <= 0 || z11 <= 0) {
+                // A no-data neighbour would bleed across the boundary and turn
+                // coastlines into ramps: keep the nearest sample instead, so the
+                // no-data mask stays at the parent's resolution.
+                value = parentElevations[(fy < 0.5 ? y0 : y1) * tileSize + (fx < 0.5 ? x0 : x1)];
+            } else {
+                const top = z00 + (z10 - z00) * fx;
+                const bottom = z01 + (z11 - z01) * fx;
+                value = top + (bottom - top) * fy;
+            }
+
+            elevations[y * tileSize + x] = value;
+        }
+    }
+
+    return elevations;
+};
+
 // ====================== INTERNAL HILLSHADE FUNCTIONS ======================
 
 const _getL = function (
@@ -369,6 +469,7 @@ const ReliefLayerClass = L.GridLayer.extend({
         mode: 'hillshade',
         elevationUrl: _mapterhornElevationUrl,
         elevationExtractor: _defaultElevationExtractor,
+        elevationFallbackDepth: _DEFAULT_ELEVATION_FALLBACK_DEPTH,
         hillshadeAzimuth: 315,
         hillshadeElevation: 45,
         hillshadeExaggeration: 1,
@@ -384,6 +485,7 @@ const ReliefLayerClass = L.GridLayer.extend({
             hillshadeA2: 0,
             hillshadeA3: 0,
             abortControllers: new globalThis.Map<string, AbortController>(),
+            missingTiles: new Set<string>(),
         };
         if (options && options.slopeColorConfig) {
             options.slopeColorFunction = _createSlopeColorFunction(options.slopeColorConfig);
@@ -411,7 +513,7 @@ const ReliefLayerClass = L.GridLayer.extend({
 
     _fillTile: async function (
         data: Uint8ClampedArray,
-        tileData: Uint8ClampedArray,
+        tileData: ElevationTileData,
         coords: L.Coords,
         abortSignal?: AbortSignal
     ) {
@@ -430,8 +532,12 @@ const ReliefLayerClass = L.GridLayer.extend({
         this._state.hillshadeA3 = Math.cos(beta) * Math.cos(alpha);
     },
 
-    _getElevation: function (tileData: Uint8ClampedArray, j: number, i: number): number {
+    _getElevation: function (tileData: ElevationTileData, j: number, i: number): number {
         const tileSize = (this.getTileSize() as L.Point).x;
+        if (tileData instanceof Float32Array) {
+            // Already decoded to metres by the parent-tile fallback.
+            return tileData[i * tileSize + j];
+        }
         const pixelIndex = (i * tileSize + j) * 4;
         const r = tileData[pixelIndex];
         const g = tileData[pixelIndex + 1];
@@ -440,7 +546,7 @@ const ReliefLayerClass = L.GridLayer.extend({
         return this.options.elevationExtractor(r, g, b, a);
     },
 
-    _getZ: function (tileData: Uint8ClampedArray, i: number, j: number): number[] {
+    _getZ: function (tileData: ElevationTileData, i: number, j: number): number[] {
         const tileSize = (this.getTileSize() as L.Point).x;
         if (i <= 0 || j <= 0 || i >= tileSize - 1 || j >= tileSize - 1) {
             const clampedI = Math.max(1, Math.min(i, tileSize - 2));
@@ -463,7 +569,7 @@ const ReliefLayerClass = L.GridLayer.extend({
 
     _doFillTile: function (
         data: Uint8ClampedArray,
-        tileData: Uint8ClampedArray,
+        tileData: ElevationTileData,
         colorFunction: ColorFunction,
         abortSignal?: AbortSignal
     ): void {
@@ -504,7 +610,7 @@ const ReliefLayerClass = L.GridLayer.extend({
 
     _fillHillshadeTile: function (
         data: Uint8ClampedArray,
-        tileData: Uint8ClampedArray,
+        tileData: ElevationTileData,
         coords: L.Coords,
         abortSignal?: AbortSignal
     ): void {
@@ -534,7 +640,7 @@ const ReliefLayerClass = L.GridLayer.extend({
 
     _fillSlopeTile: function (
         data: Uint8ClampedArray,
-        tileData: Uint8ClampedArray,
+        tileData: ElevationTileData,
         coords: L.Coords,
         abortSignal?: AbortSignal
     ): void {
@@ -550,6 +656,105 @@ const ReliefLayerClass = L.GridLayer.extend({
             (zData: number[]) => this._createSlopeColor(zData, pixelSizeMeters),
             abortSignal
         );
+    },
+
+    _buildElevationUrl: function (z: number, x: number, y: number): string {
+        return typeof this.options.elevationUrl === 'function'
+            ? this.options.elevationUrl(z, x, y)
+            : this.options.elevationUrl
+                  .replace('{z}', z.toString())
+                  .replace('{x}', x.toString())
+                  .replace('{y}', y.toString());
+    },
+
+    _rememberMissingTile: function (url: string): void {
+        const missingTiles = this._state.missingTiles;
+        if (missingTiles.size >= _MISSING_TILE_MEMO_SIZE) {
+            // Sets iterate in insertion order: drop the oldest entry.
+            const oldest = missingTiles.values().next().value;
+            if (oldest !== undefined) {
+                missingTiles.delete(oldest);
+            }
+        }
+        missingTiles.add(url);
+    },
+
+    // Fetch the DEM covering `coords`, falling back to parent tiles when the source
+    // has no data at that zoom for that area. Coverage is not uniform: Mapterhorn
+    // publishes z17 over LiDAR countries but stops at z12 over others, and there is
+    // no published index to know it in advance. Returns raw RGBA at native zoom, a
+    // decoded elevation grid when upsampled from a parent, or null when the source
+    // has nothing at all here.
+    _fetchDemData: async function (
+        coords: L.Coords,
+        tileSize: number,
+        demCtx: CanvasRenderingContext2D,
+        abortSignal: AbortSignal
+    ): Promise<ElevationTileData | null> {
+        const maxDepth = Math.max(0, Math.floor(this.options.elevationFallbackDepth || 0));
+        const ancestorUrl = (depth: number): string =>
+            this._buildElevationUrl(
+                coords.z - depth,
+                Math.floor(coords.x / Math.pow(2, depth)),
+                Math.floor(coords.y / Math.pow(2, depth))
+            );
+
+        // A tile pyramid never has data at a zoom whose parent has none, so a known
+        // missing ancestor rules out everything below it: start just above the
+        // deepest one already memoized instead of probing every level again.
+        let startDepth = 0;
+        for (let depth = maxDepth; depth >= 0; depth--) {
+            if (coords.z - depth >= 0 && this._state.missingTiles.has(ancestorUrl(depth))) {
+                startDepth = depth + 1;
+                break;
+            }
+        }
+
+        for (let depth = startDepth; depth <= maxDepth; depth++) {
+            const sourceZ = coords.z - depth;
+            if (sourceZ < 0) {
+                break;
+            }
+
+            const scale = Math.pow(2, depth);
+            const sourceX = Math.floor(coords.x / scale);
+            const sourceY = Math.floor(coords.y / scale);
+            const url = this._buildElevationUrl(sourceZ, sourceX, sourceY);
+
+            const response = await fetch(url, { signal: abortSignal });
+            if (_isMissingTileStatus(response.status)) {
+                this._rememberMissingTile(url);
+                continue;
+            }
+            if (!response.ok) {
+                throw new Error(`Failed to fetch tile: ${response.status}`);
+            }
+
+            const demBlob = await response.blob();
+            const demBitmap = await createImageBitmap(demBlob);
+            try {
+                demCtx.imageSmoothingEnabled = false;
+                demCtx.drawImage(demBitmap, 0, 0, tileSize, tileSize);
+            } finally {
+                demBitmap.close();
+            }
+
+            const demTileData = demCtx.getImageData(0, 0, tileSize, tileSize).data;
+            if (depth === 0) {
+                return demTileData;
+            }
+
+            const subTileSize = tileSize / scale;
+            return _resampleParentElevations(
+                _decodeElevations(demTileData, tileSize, this.options.elevationExtractor),
+                tileSize,
+                (coords.x - sourceX * scale) * subTileSize,
+                (coords.y - sourceY * scale) * subTileSize,
+                scale
+            );
+        }
+
+        return null;
     },
 
     _tileUnloaded: function (coords: L.Coords): void {
@@ -585,16 +790,7 @@ const ReliefLayerClass = L.GridLayer.extend({
         const abortController = new AbortController();
         this._state.abortControllers.set(tileKey, abortController);
 
-        const url =
-            typeof this.options.elevationUrl === 'function'
-                ? this.options.elevationUrl(z, x, y)
-                : this.options.elevationUrl
-                      .replace('{z}', z.toString())
-                      .replace('{x}', x.toString())
-                      .replace('{y}', y.toString());
-
         (async () => {
-            let demBitmap: ImageBitmap | null = null;
             let demCanvas: HTMLCanvasElement | null = null;
 
             try {
@@ -604,19 +800,22 @@ const ReliefLayerClass = L.GridLayer.extend({
                     throw new Error('Unable to get 2d context from DEM canvas');
                 }
 
-                const demResponse = await fetch(url, { signal: abortController.signal });
-                if (!demResponse.ok) {
-                    throw new Error(`Failed to fetch tile: ${demResponse.status}`);
+                const demTileData = await this._fetchDemData(
+                    coords,
+                    tileSize,
+                    demCtx,
+                    abortController.signal
+                );
+
+                if (demTileData === null) {
+                    // The source has no data here at any zoom. Hand back the blank
+                    // canvas: reporting an error would make Leaflet hide the tile
+                    // and log one message per missing tile.
+                    if (!abortController.signal.aborted) {
+                        done(undefined, tile);
+                    }
+                    return;
                 }
-
-                const demBlob = await demResponse.blob();
-                demBitmap = await createImageBitmap(demBlob);
-
-                demCtx.imageSmoothingEnabled = false;
-                demCtx.drawImage(demBitmap, 0, 0, tileSize, tileSize);
-
-                const demImageData = demCtx.getImageData(0, 0, tileSize, tileSize);
-                const demTileData = demImageData.data;
 
                 await this._fillTile(imageData.data, demTileData, coords, abortController.signal);
 
@@ -634,10 +833,6 @@ const ReliefLayerClass = L.GridLayer.extend({
                 }
             } finally {
                 this._state.abortControllers.delete(tileKey);
-
-                if (demBitmap) {
-                    demBitmap.close();
-                }
 
                 if (demCanvas) {
                     _canvasPool.release(demCanvas);
