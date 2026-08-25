@@ -192,6 +192,18 @@ const _defaultElevationUrl: ElevationUrlFunction = function (
     return `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
 };
 
+const _defaultMaxNativeZoom = function (
+    elevationUrl: string | ElevationUrlFunction | undefined
+): number | undefined {
+    if (elevationUrl === _mapterhornElevationUrl) {
+        return _elevationMaxNativeZooms.mapterhorn;
+    }
+    if (elevationUrl === _defaultElevationUrl) {
+        return _elevationMaxNativeZooms.terrarium;
+    }
+    return undefined;
+};
+
 const _defaultElevationExtractor: ElevationExtractorFunction = function (
     r: number,
     g: number,
@@ -357,7 +369,6 @@ const ReliefLayerClass = L.GridLayer.extend({
         mode: 'hillshade',
         elevationUrl: _mapterhornElevationUrl,
         elevationExtractor: _defaultElevationExtractor,
-        maxNativeZoom: _elevationMaxNativeZooms.mapterhorn,
         hillshadeAzimuth: 315,
         hillshadeElevation: 45,
         hillshadeExaggeration: 1,
@@ -384,13 +395,11 @@ const ReliefLayerClass = L.GridLayer.extend({
 
         L.Util.setOptions(this, options);
 
-        // The default maxNativeZoom matches Mapterhorn; align it with the other known
-        // source when the user switches URL without specifying maxNativeZoom.
-        if (
-            (!options || options.maxNativeZoom === undefined) &&
-            this.options.elevationUrl === _defaultElevationUrl
-        ) {
-            this.options.maxNativeZoom = _elevationMaxNativeZooms.terrarium;
+        // Default maxNativeZoom to the deepest zoom of the configured built-in source.
+        // Custom sources are left unclamped: their depth is unknown, and guessing would
+        // silently throw away detail the provider does have.
+        if (!options || options.maxNativeZoom === undefined) {
+            this.options.maxNativeZoom = _defaultMaxNativeZoom(this.options.elevationUrl);
         }
 
         this._recomputeHillshadeConstants();
@@ -616,9 +625,12 @@ const ReliefLayerClass = L.GridLayer.extend({
                     done(undefined, tile);
                 }
             } catch (error) {
-                if (error instanceof Error && error.name !== 'AbortError') {
+                const aborted =
+                    abortController.signal.aborted ||
+                    (error instanceof Error && error.name === 'AbortError');
+                if (!aborted) {
                     console.error(`Error loading tile ${tileKey}:`, error);
-                    done(error, tile);
+                    done(error instanceof Error ? error : new Error(String(error)), tile);
                 }
             } finally {
                 this._state.abortControllers.delete(tileKey);

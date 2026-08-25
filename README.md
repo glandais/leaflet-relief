@@ -400,8 +400,9 @@ Available via `L.GridLayer.Relief.elevationMaxNativeZooms`:
 - `mapbox` - `15`
 - `mapterhorn` - `17` (default, matching the default elevation source)
 
-Coverage is not uniform: some areas stop earlier than the source maximum. Override the option
-when using another provider:
+Custom elevation sources are left unclamped (their depth is unknown), so set the option
+yourself when using another provider. Coverage is also not uniform: some areas stop earlier
+than the source maximum.
 
 ```javascript
 const relief = L.gridLayer.relief({
@@ -414,19 +415,19 @@ const relief = L.gridLayer.relief({
 
 Inherits all options from [`L.GridLayer`](https://leafletjs.com/reference.html#gridlayer) plus the following relief-specific options:
 
-| Option                   | Type              | Default           | Description                                                                          |
-| ------------------------ | ----------------- | ----------------- | ------------------------------------------------------------------------------------ |
-| `mode`                   | `String`          | `'hillshade'`     | Visualization mode: `'hillshade'` or `'slope'`                                       |
-| `hillshadeAzimuth`       | `Number`          | `315`             | Sun azimuth angle in degrees (0-360°) for hillshade mode                             |
-| `hillshadeElevation`     | `Number`          | `45`              | Sun elevation angle in degrees (0-90°) for hillshade mode                            |
-| `hillshadeExaggeration`  | `Number`          | `1`               | Vertical exaggeration (zFactor) applied to the hillshade slope, `0` disables shading |
-| `hillshadeColorFunction` | `Function`        | Grayscale         | Custom color function for hillshade mode `function(intensity)` returns `[r, g, b]`   |
-| `slopeColorScheme`       | `String`          | `'default'`       | Preset color scheme for slope mode: `'default'`, `'glacial'`, `'thermal'`, `'earth'` |
-| `slopeColorConfig`       | `Array`           | Default HSV       | Custom HSV slope-to-hue mapping array for slope mode                                 |
-| `slopeColorFunction`     | `Function`        | Default green→red | Custom color function for slope mode `function(slopeDegrees)` returns `[r, g, b]`    |
-| `elevationUrl`           | `String/Function` | AWS Terrarium     | Custom elevation tile URL pattern or function                                        |
-| `elevationExtractor`     | `Function`        | Terrarium decoder | Custom function to extract elevation from RGBA values                                |
-| `maxNativeZoom`          | `Number`          | `17`              | Deepest zoom the elevation source provides; deeper zooms upscale the last tile       |
+| Option                   | Type              | Default           | Description                                                                                                                                                 |
+| ------------------------ | ----------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`                   | `String`          | `'hillshade'`     | Visualization mode: `'hillshade'` or `'slope'`                                                                                                              |
+| `hillshadeAzimuth`       | `Number`          | `315`             | Sun azimuth angle in degrees (0-360°) for hillshade mode                                                                                                    |
+| `hillshadeElevation`     | `Number`          | `45`              | Sun elevation angle in degrees (0-90°) for hillshade mode                                                                                                   |
+| `hillshadeExaggeration`  | `Number`          | `1`               | Vertical exaggeration (zFactor) applied to the hillshade slope, `0` disables shading                                                                        |
+| `hillshadeColorFunction` | `Function`        | Grayscale         | Custom color function for hillshade mode `function(intensity)` returns `[r, g, b]`                                                                          |
+| `slopeColorScheme`       | `String`          | `'default'`       | Preset color scheme for slope mode: `'default'`, `'glacial'`, `'thermal'`, `'earth'`                                                                        |
+| `slopeColorConfig`       | `Array`           | Default HSV       | Custom HSV slope-to-hue mapping array for slope mode                                                                                                        |
+| `slopeColorFunction`     | `Function`        | Default green→red | Custom color function for slope mode `function(slopeDegrees)` returns `[r, g, b]`                                                                           |
+| `elevationUrl`           | `String/Function` | AWS Terrarium     | Custom elevation tile URL pattern or function                                                                                                               |
+| `elevationExtractor`     | `Function`        | Terrarium decoder | Custom function to extract elevation from RGBA values                                                                                                       |
+| `maxNativeZoom`          | `Number`          | Source dependent  | Deepest zoom the elevation source provides; deeper zooms upscale the last tile. Defaults to `17` (Mapterhorn) or `15` (Terrarium); unset for custom sources |
 
 **Note**: Slope color options are mutually exclusive (XOR): only one of `slopeColorScheme`, `slopeColorConfig`, or `slopeColorFunction` should be used.
 

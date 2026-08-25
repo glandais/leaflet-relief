@@ -280,6 +280,13 @@ describe('L.GridLayer.Relief', () => {
             expect(layer.options.maxNativeZoom).toBe(15);
         });
 
+        it('should not clamp custom elevation sources', () => {
+            const layer = L.gridLayer.relief({
+                elevationUrl: 'https://example.com/tiles/{z}/{x}/{y}.png',
+            });
+            expect(layer.options.maxNativeZoom).toBeUndefined();
+        });
+
         it('should keep an explicit maxNativeZoom', () => {
             const layer = L.gridLayer.relief({ maxNativeZoom: 12 });
             expect(layer.options.maxNativeZoom).toBe(12);

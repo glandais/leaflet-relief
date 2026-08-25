@@ -137,7 +137,7 @@ This is a Leaflet plugin for terrain visualization that renders relief maps show
 - `_fillSlopeTile(data, tileData, coords, abortSignal)` - Slope rendering
 - Built-in elevation extractors: `_defaultElevationExtractor`, `_mapboxElevationExtractor`
 - Mapterhorn URL constant: `_mapterhornElevationUrl` (`https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`)
-- `_elevationMaxNativeZooms` - Deepest zoom published by each source (terrarium 15, mapbox 15, mapterhorn 17); drives the default `maxNativeZoom` so Leaflet upscales instead of requesting missing tiles
+- `_elevationMaxNativeZooms` - Deepest zoom published by each source (terrarium 15, mapbox 15, mapterhorn 17); drives the default `maxNativeZoom` (via `_defaultMaxNativeZoom`, built-in URLs only) so Leaflet upscales instead of requesting missing tiles
 
 ## Configuration Options
 
