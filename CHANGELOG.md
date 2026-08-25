@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/glandais/leaflet-relief/compare/v1.5.5...v1.6.0) (2026-08-25)
+
+
+### Features
+
+* add archeo and tricolor rendering modes ([#100](https://github.com/glandais/leaflet-relief/issues/100)) ([7249230](https://github.com/glandais/leaflet-relief/commit/7249230daabe7ebc716c02a22bca59d6f5715a2e))
+
 ## [1.5.5](https://github.com/glandais/leaflet-relief/compare/v1.5.4...v1.5.5) (2026-08-25)
 
 
