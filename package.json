@@ -89,7 +89,7 @@
     "@semantic-release/npm": "^13.1.1",
     "@types/leaflet": "^1.9.20",
     "@types/node": "^26.0.1",
-    "@vitest/coverage-v8": "^4.1.5",
+    "@vitest/coverage-v8": "^5.0.0",
     "canvas": "^3.2.0",
     "husky": "^9.1.7",
     "jsdom": "^30.0.0",
