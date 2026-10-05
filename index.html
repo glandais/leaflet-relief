@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Relief Plugin Demo</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 10px;
+            font-family: Arial, sans-serif;
+            box-sizing: border-box;
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        #map {
+            height: 70vh;
+            min-height: 400px;
+            max-height: 800px;
+            width: 100%;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+        }
+        
+        .controls {
+            margin: 15px 0;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 8px;
+            }
+            
+            #map {
+                height: 60vh;
+                min-height: 350px;
+                border-radius: 4px;
+                border-width: 1px;
+            }
+            
+            .controls {
+                margin: 10px 0;
+                gap: 6px;
+                justify-content: center;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            body {
+                padding: 5px;
+            }
+            
+            #map {
+                height: 55vh;
+                min-height: 300px;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+        }
+        
+        .controls button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #007cad;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+            min-width: 120px;
+            white-space: nowrap;
+        }
+        
+        .controls button:hover {
+            background: #005a82;
+        }
+        
+        .controls button.active {
+            background: #28a745;
+        }
+        
+        .controls button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .opacity-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .opacity-control label {
+            font-weight: bold;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        
+        .opacity-control input[type="range"] {
+            width: 120px;
+            min-width: 80px;
+        }
+        
+        .opacity-control input[type="checkbox"] {
+            margin: 0 8px;
+            transform: scale(1.2);
+        }
+        
+        .opacity-control select {
+            padding: 4px 8px;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            min-width: 100px;
+        }
+        
+        @media (max-width: 768px) {
+            .controls button {
+                padding: 8px 16px;
+                font-size: 13px;
+                min-width: 100px;
+            }
+            
+            .opacity-control {
+                margin-left: 0;
+                gap: 6px;
+            }
+            
+            .opacity-control input[type="range"] {
+                width: 100px;
+            }
+            
+            .opacity-control label {
+                font-size: 13px;
+            }
+            
+            .opacity-control select {
+                font-size: 13px;
+                min-width: 90px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .controls button {
+                padding: 10px 15px;
+                font-size: 14px;
+                min-width: auto;
+                width: 100%;
+            }
+            
+            .opacity-control {
+                width: 100%;
+                justify-content: space-between;
+                margin-left: 0;
+            }
+            
+            .opacity-control input[type="range"] {
+                flex-grow: 1;
+                max-width: 120px;
+            }
+            
+            .opacity-control select {
+                flex-grow: 1;
+                max-width: 150px;
+            }
+        }
+        
+        .info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            border-left: 4px solid #007cad;
+        }
+        
+        .info h2 {
+            margin-top: 0;
+            color: #007cad;
+            font-size: 1.4em;
+        }
+        
+        .info p {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .info ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .info li {
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+        
+        @media (max-width: 768px) {
+            .info {
+                padding: 12px;
+                margin-bottom: 12px;
+                border-radius: 4px;
+            }
+            
+            .info h2 {
+                font-size: 1.3em;
+            }
+            
+            .info ul {
+                padding-left: 18px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .info {
+                padding: 10px;
+                margin-bottom: 10px;
+            }
+            
+            .info h2 {
+                font-size: 1.2em;
+            }
+            
+            .info ul {
+                padding-left: 16px;
+            }
+            
+            .info li {
+                font-size: 14px;
+            }
+        }
+        
+        .location-select {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            min-width: 150px;
+            background: white;
+        }
+        
+        @media (max-width: 768px) {
+            .location-select {
+                font-size: 13px;
+                min-width: 130px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .location-select {
+                width: 100%;
+                min-width: auto;
+                margin-top: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h2>Leaflet Relief Plugin Demo</h2>
+        <p>This demo showcases the Leaflet Relief plugin with both hillshade and slope visualization modes.
+           The plugin uses <a href="https://mapterhorn.com/" target="_blank" style="color: #007cad;">Mapterhorn</a> elevation tiles (512×512 WebP) to create terrain visualizations.
+           <a href="https://github.com/glandais/leaflet-relief" target="_blank" style="color: #007cad; text-decoration: none; font-weight: bold;">View on GitHub →</a></p>
+        <ul>
+            <li><strong>Hillshade Mode:</strong> Simulates sunlight on terrain to show relief</li>
+            <li><strong>Slope Mode:</strong> Colors terrain by steepness (green = flat, red = steep)</li>
+            <li><strong>Archeo Mode:</strong> Multi-directional hillshade with warm/cool tinting of convex/concave micro-relief</li>
+            <li><strong>Tricolor Mode:</strong> Three hillshades from different azimuths mapped to the red, green and blue channels</li>
+            <li><strong>Interactive Controls:</strong> Every rendering parameter of the active mode is adjustable in real-time, along with the elevation source and its parent-tile fallback depth</li>
+            <li><strong>Hillshade Colors:</strong> Choose from grayscale, sepia, blue-tinted, green-tinted, or warm color schemes</li>
+            <li><strong>Slope Colors:</strong> Choose from default, glacial, thermal, or earth color schemes for slope visualization</li>
+        </ul>
+    </div>
+    
+    <div class="controls">
+        <button id="hillshadeBtn" class="active">Hillshade Mode</button>
+        <button id="slopeBtn">Slope Mode</button>
+        <button id="archeoBtn">Archeo Mode</button>
+        <button id="tricolorBtn">Tricolor Mode</button>
+        <button id="toggleBtn">Hide Relief</button>
+        
+        <div class="opacity-control">
+            <label for="opacitySlider">Opacity:</label>
+            <input type="range" id="opacitySlider" min="0" max="100" value="60">
+            <span id="opacityValue">60%</span>
+
+            <label for="sourceSelect">DEM Source:</label>
+            <select id="sourceSelect">
+                <option value="mapterhorn">Mapterhorn (z17)</option>
+                <option value="terrarium">AWS Terrarium (z15)</option>
+                <option value="ignLidarHdMnt">IGN LiDAR HD - MNT (France, z17)</option>
+                <option value="ignLidarHdMns">IGN LiDAR HD - MNS (France, z17)</option>
+            </select>
+
+            <label for="fallbackSlider">Fallback Depth:</label>
+            <input type="range" id="fallbackSlider" min="0" max="8" step="1" value="5">
+            <span id="fallbackValue">5</span>
+        </div>
+        
+        <div class="opacity-control" id="hillshadeControls" style="display: flex;">
+            <label for="azimuthSlider">Azimuth:</label>
+            <input type="range" id="azimuthSlider" min="0" max="360" value="315">
+            <span id="azimuthValue">315°</span>
+            
+            <label for="elevationSlider">Elevation:</label>
+            <input type="range" id="elevationSlider" min="0" max="90" value="45">
+            <span id="elevationValue">45°</span>
+            
+            <label for="exaggerationSlider">Exaggeration:</label>
+            <input type="range" id="exaggerationSlider" min="0.1" max="3" step="0.1" value="1">
+            <span id="exaggerationValue">1.0×</span>
+            
+            <label for="colorSchemeSelect">Color:</label>
+            <select id="colorSchemeSelect">
+                <option value="grayscale">Grayscale</option>
+                <option value="sepia">Sepia</option>
+                <option value="blue">Blue Tinted</option>
+                <option value="green">Green Tinted</option>
+                <option value="warm">Warm</option>
+            </select>
+        </div>
+        
+        <div class="opacity-control" id="slopeControls" style="display: none;">
+            <label for="slopeColorSelect">Color Scheme:</label>
+            <select id="slopeColorSelect">
+                <option value="default">Default (Green→Red)</option>
+                <option value="glacial">Glacial (Blue→Red)</option>
+                <option value="thermal">Thermal (Purple→Yellow)</option>
+                <option value="earth">Earth (Green→Brown)</option>
+            </select>
+        </div>
+
+        <div class="opacity-control" id="archeoControls" style="display: none;">
+            <label for="archeoAzimuthsInput">Azimuths:</label>
+            <input type="text" id="archeoAzimuthsInput" value="225, 270, 315, 360" size="15">
+
+            <label for="archeoElevationSlider">Elevation:</label>
+            <input type="range" id="archeoElevationSlider" min="0" max="90" value="45">
+            <span id="archeoElevationValue">45°</span>
+
+            <label for="archeoExaggerationSlider">Exaggeration:</label>
+            <input type="range" id="archeoExaggerationSlider" min="0.1" max="10" step="0.1" value="3">
+            <span id="archeoExaggerationValue">3.0×</span>
+
+            <label for="glowSlider">Glow Strength:</label>
+            <input type="range" id="glowSlider" min="1" max="40" step="1" value="15">
+            <span id="glowValue">15</span>
+
+            <label for="archeoSchemeSelect">Color:</label>
+            <select id="archeoSchemeSelect">
+                <option value="default">Default</option>
+                <option value="vivid">Vivid</option>
+                <option value="subtle">Subtle</option>
+            </select>
+
+            <label for="archeoWarmInput">Warm:</label>
+            <input type="color" id="archeoWarmInput" value="#ec9652">
+
+            <label for="archeoCoolInput">Cool:</label>
+            <input type="color" id="archeoCoolInput" value="#7eacf6">
+
+            <label for="archeoBaseInput">Base:</label>
+            <input type="color" id="archeoBaseInput" value="#c0bfc4">
+        </div>
+
+        <div class="opacity-control" id="tricolorControls" style="display: none;">
+            <label for="tricolorRedSlider">Red Azimuth:</label>
+            <input type="range" id="tricolorRedSlider" min="0" max="360" value="315">
+            <span id="tricolorRedValue">315°</span>
+
+            <label for="tricolorGreenSlider">Green:</label>
+            <input type="range" id="tricolorGreenSlider" min="0" max="360" value="15">
+            <span id="tricolorGreenValue">15°</span>
+
+            <label for="tricolorBlueSlider">Blue:</label>
+            <input type="range" id="tricolorBlueSlider" min="0" max="360" value="75">
+            <span id="tricolorBlueValue">75°</span>
+
+            <label for="tricolorElevationSlider">Elevation:</label>
+            <input type="range" id="tricolorElevationSlider" min="0" max="90" value="35">
+            <span id="tricolorElevationValue">35°</span>
+
+            <label for="tricolorExaggerationSlider">Exaggeration:</label>
+            <input type="range" id="tricolorExaggerationSlider" min="0.1" max="5" step="0.1" value="1">
+            <span id="tricolorExaggerationValue">1.0×</span>
+        </div>
+    </div>
+    
+    <div id="map"></div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Relief Plugin (UMD build) -->
+    <script src="dist/leaflet-relief.umd.js"></script>
+    
+    <script>
+
+        // Color scheme functions for hillshade
+        const colorSchemes = {
+            grayscale: function(intensity) {
+                const value = Math.round(intensity * 255);
+                return [value, value, value];
+            },
+            sepia: function(intensity) {
+                return [
+                    Math.round(intensity * 255),  // Red
+                    Math.round(intensity * 240),  // Green
+                    Math.round(intensity * 200)   // Blue
+                ];
+            },
+            blue: function(intensity) {
+                return [
+                    Math.round(intensity * 200),  // Red
+                    Math.round(intensity * 220),  // Green
+                    Math.round(intensity * 255)   // Blue
+                ];
+            },
+            green: function(intensity) {
+                return [
+                    Math.round(intensity * 180),  // Red
+                    Math.round(intensity * 255),  // Green
+                    Math.round(intensity * 200)   // Blue
+                ];
+            },
+            warm: function(intensity) {
+                return [
+                    Math.round(intensity * 255),  // Red
+                    Math.round(intensity * 200),  // Green
+                    Math.round(intensity * 150)   // Blue
+                ];
+            }
+        };
+
+        // Initialize the map centered on Mont Blanc, France (good terrain example)
+        const map = L.map('map').setView([45.8326, 6.8652], 12);
+        
+        // Add OpenStreetMap base layer
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+        
+        // Get control elements
+        const hillshadeBtn = document.getElementById('hillshadeBtn');
+        const slopeBtn = document.getElementById('slopeBtn');
+        const archeoBtn = document.getElementById('archeoBtn');
+        const tricolorBtn = document.getElementById('tricolorBtn');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const opacitySlider = document.getElementById('opacitySlider');
+        const opacityValue = document.getElementById('opacityValue');
+        const azimuthSlider = document.getElementById('azimuthSlider');
+        const azimuthValue = document.getElementById('azimuthValue');
+        const elevationSlider = document.getElementById('elevationSlider');
+        const elevationValue = document.getElementById('elevationValue');
+        const exaggerationSlider = document.getElementById('exaggerationSlider');
+        const exaggerationValue = document.getElementById('exaggerationValue');
+        const colorSchemeSelect = document.getElementById('colorSchemeSelect');
+        const slopeColorSelect = document.getElementById('slopeColorSelect');
+        const sourceSelect = document.getElementById('sourceSelect');
+        const fallbackSlider = document.getElementById('fallbackSlider');
+        const fallbackValue = document.getElementById('fallbackValue');
+        const glowSlider = document.getElementById('glowSlider');
+        const glowValue = document.getElementById('glowValue');
+        const archeoSchemeSelect = document.getElementById('archeoSchemeSelect');
+        const archeoAzimuthsInput = document.getElementById('archeoAzimuthsInput');
+        const archeoElevationSlider = document.getElementById('archeoElevationSlider');
+        const archeoElevationValue = document.getElementById('archeoElevationValue');
+        const archeoExaggerationSlider = document.getElementById('archeoExaggerationSlider');
+        const archeoExaggerationValue = document.getElementById('archeoExaggerationValue');
+        const archeoWarmInput = document.getElementById('archeoWarmInput');
+        const archeoCoolInput = document.getElementById('archeoCoolInput');
+        const archeoBaseInput = document.getElementById('archeoBaseInput');
+        const tricolorRedSlider = document.getElementById('tricolorRedSlider');
+        const tricolorRedValue = document.getElementById('tricolorRedValue');
+        const tricolorGreenSlider = document.getElementById('tricolorGreenSlider');
+        const tricolorGreenValue = document.getElementById('tricolorGreenValue');
+        const tricolorBlueSlider = document.getElementById('tricolorBlueSlider');
+        const tricolorBlueValue = document.getElementById('tricolorBlueValue');
+        const tricolorElevationSlider = document.getElementById('tricolorElevationSlider');
+        const tricolorElevationValue = document.getElementById('tricolorElevationValue');
+        const tricolorExaggerationSlider = document.getElementById('tricolorExaggerationSlider');
+        const tricolorExaggerationValue = document.getElementById('tricolorExaggerationValue');
+        const hillshadeControls = document.getElementById('hillshadeControls');
+        const slopeControls = document.getElementById('slopeControls');
+        const archeoControls = document.getElementById('archeoControls');
+        const tricolorControls = document.getElementById('tricolorControls');
+
+        // Preset archeo palettes, kept in sync with the plugin's _archeoColorSchemes so
+        // that picking a scheme reloads the three color pickers with its colors.
+        const archeoSchemeColors = {
+            default: { warm: '#ec9652', cool: '#7eacf6', base: '#c0bfc4' },
+            vivid: { warm: '#f67e28', cool: '#5690fa', base: '#c6c5ca' },
+            subtle: { warm: '#e2b48e', cool: '#a6beec', base: '#bebec1' }
+        };
+
+        const elevationSources = {
+            mapterhorn: {
+                url: L.GridLayer.Relief.elevationUrls.mapterhorn,
+                extractor: L.GridLayer.Relief.elevationExtractors.mapterhorn,
+                attribution: L.GridLayer.Relief.elevationAttributions.mapterhorn
+            },
+            terrarium: {
+                url: L.GridLayer.Relief.elevationUrls.terrarium,
+                extractor: L.GridLayer.Relief.elevationExtractors.terrarium,
+                attribution: L.GridLayer.Relief.elevationAttributions.terrarium
+            },
+            // Raw float32 elevations from IGN's WMS: France only, blank elsewhere.
+            ignLidarHdMnt: {
+                url: L.GridLayer.Relief.elevationUrls.ignLidarHdMnt,
+                decoder: L.GridLayer.Relief.elevationTileDecoders.bil32,
+                attribution: L.GridLayer.Relief.elevationAttributions.ignLidarHd
+            },
+            ignLidarHdMns: {
+                url: L.GridLayer.Relief.elevationUrls.ignLidarHdMns,
+                decoder: L.GridLayer.Relief.elevationTileDecoders.bil32,
+                attribution: L.GridLayer.Relief.elevationAttributions.ignLidarHd
+            }
+        };
+
+        function hexToRgb(hex) {
+            return [
+                parseInt(hex.slice(1, 3), 16),
+                parseInt(hex.slice(3, 5), 16),
+                parseInt(hex.slice(5, 7), 16)
+            ];
+        }
+
+        function parseAzimuths(text, fallback) {
+            const azimuths = text
+                .split(',')
+                .map(part => parseFloat(part))
+                .filter(value => !isNaN(value));
+            return azimuths.length > 0 ? azimuths : fallback;
+        }
+        
+        let reliefVisible = true;
+        let reliefLayer = undefined;
+        let mode = 'hillshade';
+        updateLayer();
+
+        function updateLayer() {
+            if (reliefVisible) {
+                if (reliefLayer) {
+                    map.removeLayer(reliefLayer);
+                }
+                const source = elevationSources[sourceSelect.value];
+                reliefLayer = L.gridLayer.relief({
+                    mode: mode,
+                    elevationUrl: source.url,
+                    // Leaflet copies every key, so an absent one must be omitted
+                    // rather than passed as undefined over the layer's default.
+                    ...(source.extractor ? { elevationExtractor: source.extractor } : {}),
+                    ...(source.decoder ? { elevationTileDecoder: source.decoder } : {}),
+                    attribution: source.attribution,
+                    elevationFallbackDepth: parseInt(fallbackSlider.value),
+                    hillshadeAzimuth: parseInt(azimuthSlider.value),
+                    hillshadeElevation: parseInt(elevationSlider.value),
+                    hillshadeExaggeration: parseFloat(exaggerationSlider.value),
+                    hillshadeColorFunction: colorSchemes[colorSchemeSelect.value],
+                    slopeColorScheme: slopeColorSelect.value,
+                    archeoAzimuths: parseAzimuths(archeoAzimuthsInput.value, [225, 270, 315, 360]),
+                    archeoElevation: parseInt(archeoElevationSlider.value),
+                    archeoExaggeration: parseFloat(archeoExaggerationSlider.value),
+                    archeoGlowStrength: parseFloat(glowSlider.value),
+                    archeoWarmColor: hexToRgb(archeoWarmInput.value),
+                    archeoCoolColor: hexToRgb(archeoCoolInput.value),
+                    archeoBaseColor: hexToRgb(archeoBaseInput.value),
+                    tricolorAzimuths: [
+                        parseInt(tricolorRedSlider.value),
+                        parseInt(tricolorGreenSlider.value),
+                        parseInt(tricolorBlueSlider.value)
+                    ],
+                    tricolorElevation: parseInt(tricolorElevationSlider.value),
+                    tricolorExaggeration: parseFloat(tricolorExaggerationSlider.value),
+                    opacity: opacitySlider.value / 100,
+                    zIndex: 100
+                });
+                reliefLayer.addTo(map);
+            } else {
+                if (reliefLayer) {
+                    map.removeLayer(reliefLayer);
+                    reliefLayer = undefined;
+                }
+            }
+        }
+
+        // Button event handlers
+        const modeButtons = {
+            hillshade: hillshadeBtn,
+            slope: slopeBtn,
+            archeo: archeoBtn,
+            tricolor: tricolorBtn
+        };
+        const modeControls = {
+            hillshade: hillshadeControls,
+            slope: slopeControls,
+            archeo: archeoControls,
+            tricolor: tricolorControls
+        };
+
+        function setMode(newMode) {
+            mode = newMode;
+            updateLayer();
+
+            Object.entries(modeButtons).forEach(([name, button]) => {
+                button.classList.toggle('active', name === newMode);
+            });
+            Object.entries(modeControls).forEach(([name, controls]) => {
+                controls.style.display = name === newMode ? 'flex' : 'none';
+            });
+        }
+
+        Object.entries(modeButtons).forEach(([name, button]) => {
+            button.addEventListener('click', () => setMode(name));
+        });
+        
+        toggleBtn.addEventListener('click', () => {
+            if (reliefVisible) {
+                toggleBtn.textContent = 'Show Relief';
+                reliefVisible = false;
+            } else {
+                toggleBtn.textContent = 'Hide Relief';
+                reliefVisible = true;
+            }
+            updateLayer();
+        });
+        
+        // Opacity control
+        opacitySlider.addEventListener('input', (e) => {
+            const opacity = e.target.value / 100;
+            opacityValue.textContent = e.target.value + '%';
+            updateLayer();
+        });
+
+        // Azimuth control
+        azimuthSlider.addEventListener('input', (e) => {
+            const azimuth = parseInt(e.target.value);
+            azimuthValue.textContent = azimuth + '°';
+            updateLayer();
+        });
+        
+        // Elevation control
+        elevationSlider.addEventListener('input', (e) => {
+            const elevation = parseInt(e.target.value);
+            elevationValue.textContent = elevation + '°';
+            updateLayer();
+        });
+        
+        // Exaggeration control
+        exaggerationSlider.addEventListener('input', (e) => {
+            const exaggeration = parseFloat(e.target.value);
+            exaggerationValue.textContent = exaggeration.toFixed(1) + '×';
+            updateLayer();
+        });
+        
+        // Color scheme control
+        colorSchemeSelect.addEventListener('change', (e) => {
+            updateLayer();
+        });
+        
+        // Slope color scheme control
+        slopeColorSelect.addEventListener('change', (e) => {
+            updateLayer();
+        });
+
+        // Archeo controls
+        glowSlider.addEventListener('input', (e) => {
+            glowValue.textContent = e.target.value;
+            updateLayer();
+        });
+
+        // Selecting a preset reloads the color pickers, which stay editable afterwards
+        archeoSchemeSelect.addEventListener('change', (e) => {
+            const scheme = archeoSchemeColors[e.target.value];
+            archeoWarmInput.value = scheme.warm;
+            archeoCoolInput.value = scheme.cool;
+            archeoBaseInput.value = scheme.base;
+            updateLayer();
+        });
+
+        archeoAzimuthsInput.addEventListener('change', () => {
+            updateLayer();
+        });
+
+        archeoElevationSlider.addEventListener('input', (e) => {
+            archeoElevationValue.textContent = e.target.value + '°';
+            updateLayer();
+        });
+
+        archeoExaggerationSlider.addEventListener('input', (e) => {
+            archeoExaggerationValue.textContent = parseFloat(e.target.value).toFixed(1) + '×';
+            updateLayer();
+        });
+
+        [archeoWarmInput, archeoCoolInput, archeoBaseInput].forEach(input => {
+            input.addEventListener('input', () => {
+                updateLayer();
+            });
+        });
+
+        // Tricolor controls
+        const tricolorAzimuthInputs = [
+            [tricolorRedSlider, tricolorRedValue],
+            [tricolorGreenSlider, tricolorGreenValue],
+            [tricolorBlueSlider, tricolorBlueValue]
+        ];
+        tricolorAzimuthInputs.forEach(([slider, output]) => {
+            slider.addEventListener('input', (e) => {
+                output.textContent = e.target.value + '°';
+                updateLayer();
+            });
+        });
+
+        tricolorElevationSlider.addEventListener('input', (e) => {
+            tricolorElevationValue.textContent = e.target.value + '°';
+            updateLayer();
+        });
+
+        tricolorExaggerationSlider.addEventListener('input', (e) => {
+            tricolorExaggerationValue.textContent = parseFloat(e.target.value).toFixed(1) + '×';
+            updateLayer();
+        });
+
+        // Elevation source controls
+        sourceSelect.addEventListener('change', () => {
+            updateLayer();
+        });
+
+        fallbackSlider.addEventListener('input', (e) => {
+            fallbackValue.textContent = e.target.value;
+            updateLayer();
+        });
+        
+        // Add some location presets for easy navigation
+        const locations = [
+            { name: 'Mont Blanc, Chamonix', coords: [45.8326, 6.8652], zoom: 12 },
+            { name: 'Cirque de Gavarnie, Pyrénées', coords: [42.7316, -0.0066], zoom: 13 },
+            { name: 'Mont Ventoux, Provence', coords: [44.1712, 5.2786], zoom: 12 },
+            { name: 'Pic du Midi, Pyrénées', coords: [42.9367, 0.1417], zoom: 13 },
+            { name: 'Cahokia Mounds, Illinois', coords: [38.6551977, -90.0623269], zoom: 16 }
+        ];
+        
+        // Add location selector
+        const locationSelect = document.createElement('select');
+        locationSelect.className = 'location-select';
+        
+        // Add default option
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Choose a location...';
+        locationSelect.appendChild(defaultOption);
+        
+        // Add location options
+        locations.forEach(location => {
+            const option = document.createElement('option');
+            option.value = JSON.stringify(location);
+            option.textContent = location.name;
+            locationSelect.appendChild(option);
+        });
+        
+        locationSelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                const location = JSON.parse(e.target.value);
+                map.setView(location.coords, location.zoom);
+            }
+        });
+        
+        document.querySelector('.controls').appendChild(locationSelect);
+    </script>
+</body>
+</html>
