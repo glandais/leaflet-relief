@@ -416,7 +416,7 @@ const tricolor = L.gridLayer.relief({
 ### Complete Example
 
 ```html
-<!DOCTYPE html>
+<!doctype html>
 <html>
     <head>
         <meta charset="utf-8" />
